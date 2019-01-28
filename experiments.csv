@@ -1,0 +1,16 @@
+A,a1,delay,64
+A,a1,abort,52
+A,a2,delay,54
+A,a2,abort,54
+D,d1,delay,63
+D,d1,abort,57
+B,b1,delay,80
+B,b1,abort,55
+E,e1,delay,63
+E,e1,abort,73
+E,e2,delay,54
+E,e2,abort,68
+C,c2,delay,63
+C,c2,abort,63
+C,c1,delay,72
+C,c1,abort,65
