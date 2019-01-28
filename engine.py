@@ -1,7 +1,7 @@
 import architecture
 import experiment
-import numpy as np
 import csv 
+import strategy
 
 def main():
     # init architecture from model
@@ -28,14 +28,17 @@ def main():
 
     # randomly select experiments and count in csv
     i = 0
+    randomStrategy = strategy.RandomSelection()
+    context = strategy.Context(randomStrategy)
     print("Starting selection ...")
     while i < 1000:
-        index = np.random.randint(0,len(experiments))
-        experiments[index].countcsv("experiments.csv")
+        context.next_experiment(experiments)
         i = i+1
     print("Finished selection. See experiments.csv for results")
 
-    
+
+
+
     
 
 if __name__ == "__main__":
