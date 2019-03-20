@@ -1,3 +1,3 @@
-# Decision Engine Algorithms
-Algorithms for chaos experiment selection.
+# Decision Engine Algorithms 
+Algorithms for chaos experiment selection. 
  
