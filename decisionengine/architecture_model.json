@@ -1,0 +1,138 @@
+{
+  "microservices": [
+    {
+      "name": "A",
+      "instances": 1,
+      "patterns": [],
+      "capacity": 1000,
+      "operations": [
+        {
+          "name": "a1",
+          "demand": 100,
+          "circuitBreaker": {
+            "rollingWindow": 10,
+            "requestVolumeThreshold": 20,
+            "errorThresholdPercentage": 0.5,
+            "timeout": 1,
+            "sleepWindow": 5
+          },
+          "dependencies": [
+            {
+              "service": "B",
+              "operation": "b1",
+              "probability": 1.0
+            },
+            {
+              "service": "C",
+              "operation": "c1",
+              "probability": 1.0
+            }
+          ]
+        },
+        {
+          "name": "a2",
+          "demand": 100,
+          "circuitBreaker": {
+            "rollingWindow": 10,
+            "requestVolumeThreshold": 20,
+            "errorThresholdPercentage": 0.5,
+            "timeout": 1,
+            "sleepWindow": 5
+          },
+          "dependencies": [
+            {
+              "service": "C",
+              "operation": "c2",
+              "probability": 1.0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "D",
+      "instances": 1,
+      "patterns": [],
+      "capacity": 1000,
+      "operations": [
+        {
+          "name": "d1",
+          "demand": 100,
+          "circuitBreaker": null,
+          "dependencies": []
+        }
+      ]
+    },
+    {
+      "name": "B",
+      "instances": 1,
+      "patterns": [],
+      "capacity": 1000,
+      "operations": [
+        {
+          "name": "b1",
+          "demand": 100,
+          "circuitBreaker": null,
+          "dependencies": [
+            {
+              "service": "D",
+              "operation": "d1",
+              "probability": 1.0
+            },
+            {
+              "service": "E",
+              "operation": "e1",
+              "probability": 1.0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "E",
+      "instances": 1,
+      "patterns": [],
+      "capacity": 1000,
+      "operations": [
+        {
+          "name": "e1",
+          "demand": 100,
+          "circuitBreaker": null,
+          "dependencies": []
+        },
+        {
+          "name": "e2",
+          "demand": 100,
+          "circuitBreaker": null,
+          "dependencies": []
+        }
+      ]
+    },
+    {
+      "name": "C",
+      "instances": 1,
+      "patterns": [],
+      "capacity": 1000,
+      "operations": [
+        {
+          "name": "c2",
+          "demand": 100,
+          "circuitBreaker": null,
+          "dependencies": []
+        },
+        {
+          "name": "c1",
+          "demand": 100,
+          "circuitBreaker": null,
+          "dependencies": [
+            {
+              "service": "E",
+              "operation": "e2",
+              "probability": 1.0
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
