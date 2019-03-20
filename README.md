@@ -1,3 +1,3 @@
-# Decision Engine 
-Decision engine for selecting chaos experiments for a microservice architecture.
+# Decision Engine Algorithms
+Algorithms for chaos experiment selection.
  
