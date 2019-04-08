@@ -6,11 +6,11 @@ date = 'experiment-2018-12-02T07-32-48UTC' #for testing
 pattern = 'a1false-a2true-b1false-c1false' #for testing
 
 actions=['b1-abort','b1-delay','c1-abort','c1-delay','c2-abort','c2-delay','d1-abort','d1-delay','e1-abort','e1-delay','e2-abort','e2-delay']
-epsilon = 0.3
+epsilon = 1.0
 
 
 
-trials = 10
+trials = 50
 nExperiments = 100
 total = trials * nExperiments
 done = 0
@@ -79,4 +79,4 @@ for trialno in range(trials):
     rewardRandomTotal.append(rewardRandom)
 
 learningDF = pd.DataFrame({'Learning': rewardLearningTotal,'No learning': rewardRandomTotal})
-learningDF.to_csv('bandit03.csv')
+learningDF.to_csv('bandit10.csv')

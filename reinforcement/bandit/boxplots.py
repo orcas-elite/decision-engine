@@ -12,31 +12,33 @@ from scipy.stats import mode
 import pandas as pd
     
 
-epislon = '03'
-res = pd.read_csv('bandit' + epislon + '.csv')
+epsilons = ['01', '03', '05', '07', '09', '10']
 
-resL = res['Learning']
-resNoL = res['No learning']
+for epsilon in epsilons:
+    res = pd.read_csv('bandit' + epsilon + '.csv')
 
-resAll=[resL,resNoL]
-print("Learning"+str(np.median(resL)))
-print("no Learning "+str(np.median(resNoL)))
-print(ks_2samp(resL,resNoL))
+    resL = res['Learning']
+    resNoL = res['No learning']
 
-fig = plt.figure(figsize=(4, 2.5))
-sns.set_style("whitegrid")
+    resAll=[resL,resNoL]
+    print("Learning"+str(np.median(resL)))
+    print("no Learning "+str(np.median(resNoL)))
+    print(ks_2samp(resL,resNoL))
 
-ax = sns.boxplot(data=resAll,sym='',palette="Greys")
-ax.spines['top'].set_visible(False)
-ax.spines['right'].set_visible(False)
-ax.spines['bottom'].set_visible(False)
-ax.xaxis.set_ticks_position('none')
-ax.yaxis.set_ticks_position('none')
-ax.xaxis.set_ticklabels(['Learning','No learning'])
-#ax.xaxis.set_ticklabels([' ',' '])
-#ax.set_title(fNumber+' variables')
-#ax.set_ylim([-0.1,1.1])
-ax.yaxis.set_label_text('% faults')
-formatter = ScalarFormatter(useOffset=False)
-ax.yaxis.set_major_formatter(formatter)
-fig.savefig('boxplotsbandit' + epislon + '.pdf', bbox_inches='tight')
+    fig = plt.figure(figsize=(4, 2.5))
+    sns.set_style("whitegrid")
+
+    ax = sns.boxplot(data=resAll,sym='',palette="Greys")
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['bottom'].set_visible(False)
+    ax.xaxis.set_ticks_position('none')
+    ax.yaxis.set_ticks_position('none')
+    ax.xaxis.set_ticklabels(['Learning','No learning'])
+    #ax.xaxis.set_ticklabels([' ',' '])
+    #ax.set_title(fNumber+' variables')
+    #ax.set_ylim([-0.1,1.1])
+    ax.yaxis.set_label_text('Total reward (100 actions)')
+    formatter = ScalarFormatter(useOffset=False)
+    ax.yaxis.set_major_formatter(formatter)
+    fig.savefig('boxplotsbandit' + epsilon + '.pdf', bbox_inches='tight')
