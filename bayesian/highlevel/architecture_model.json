@@ -91,7 +91,6 @@
             "name": "b2",
             "demand": 100,
             "circuitBreaker": null,
-            "circuitBreaker": null,
             "dependencies": [
                 {
                     "service": "D",

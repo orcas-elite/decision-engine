@@ -44,9 +44,9 @@ for trialno in range(trials):
         #select fault to inject randomly
         randomFault = random.choice(faultInjection)
     
-        fileName = nofaultcsvfile='../../Experiments/'+ex+'/'+pat+'/'+injectFault+'/'+'response.csv'
+        fileName = '../../Experiments/'+ex+'/'+pat+'/'+injectFault+'/'+'response.csv'
 
-        randomFilename = nofaultcsvfile='../../Experiments/'+ex+'/'+pat+'/'+randomFault+'/'+'response.csv'
+        randomFilename = '../../Experiments/'+ex+'/'+pat+'/'+randomFault+'/'+'response.csv'
     
         resultsDf = pd.read_csv(fileName,usecols=[0,1,2,3,4,5])
         randomDf = pd.read_csv(randomFilename,usecols=[0,1,2,3,4,5])
