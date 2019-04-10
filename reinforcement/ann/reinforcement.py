@@ -75,8 +75,8 @@ for vertex in dep_graph.vertices():
 
 classifier = classifier.NeuralClassifier(12)
 
-nTrials = 5
-nExperiments = 1000
+nTrials = 20
+nExperiments = 25000
 total = nTrials * nExperiments
 done = 0
 
@@ -112,7 +112,7 @@ for f in range(nTrials):
         total_reward = 0
         random_reward = 0
 
-        episode_len = 5
+        episode_len = int(len(states)/2)
         for i in range(episode_len):
             # network selection
             state = sorted_states[i]
@@ -150,4 +150,4 @@ for f in range(nTrials):
 print(counter)
 
 percDF = pd.DataFrame({'Network': totalRewardsNetwork,'Random': totalRewardsRandom})
-percDF.to_csv('experiment_results.csv')
+percDF.to_csv('experiment_results_1.csv')
