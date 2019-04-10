@@ -1,6 +1,11 @@
 import numpy as np
 import pandas as pd
 import csv 
+import json 
+import graph 
+import NeuralClassifier as classifier
+import random
+import statistics
 
 date = 'experiment-2018-12-02T07-32-48UTC' #for testing
 pattern = 'a1false-a2true-b1false-c1false' #for testing
@@ -10,81 +15,139 @@ injections=['b1-abort','b1-delay','c1-abort','c1-delay','c2-abort','c2-delay','d
 
 configs = ['a1false-a2true-b1false-c1false']
 
-epsilon = 0.1
-actions = []
 
-for config in configs:
-    for injection in injections:
-        actions.append(config + '/' + injection)
 
-trials = 50
-nExperiments = 50
-total = trials * nExperiments
+# vertex: [opname, circuitBreaker?, opcount for service, instances service, incoming dependencies]
+dep_graph = graph.Graph()
+with open("architecture_model.json", 'r') as f:
+    architecture = json.load(f)
+
+    nMicros = len(architecture["microservices"])
+    for service in range(0,nMicros):      
+        nop = len(architecture["microservices"][service]['operations'])
+        for op in range(0,nop):
+            cb = True 
+            if architecture["microservices"][service]['operations'][op]['circuitBreaker'] == None:
+                cb = False
+            instances = architecture["microservices"][service]['instances']
+            vertex = tuple([architecture["microservices"][service]['operations'][op]['name'], cb, nop, instances, 0, '', None, 0])
+            dep_graph.add_vertex(vertex)
+            for dep in architecture["microservices"][service]['operations'][op]['dependencies']:
+                dep_graph.add_edge([vertex, dep['operation']])
+
+states = []
+counter = {}
+# state: [opname, circuitBreaker?, opcount for service, instances service, incoming dependencies, faultType, [4 sample results], incoming dependencies]
+for vertex in dep_graph.vertices():
+    incoming = dep_graph.vertex_incoming(vertex)
+    vert_list = list(vertex)
+    if vert_list[0] in ['a1','a2','b2']:
+        continue
+    vert_list[4] = incoming 
+    vert_list[6] = []
+    vert_list[5] = 'abort'
+    fileName = '../../experiments/' + date + '/' + pattern + '/' + vert_list[0] + '-' + vert_list[5] + '/response.csv'
+    df = pd.read_csv(fileName,usecols=[0,1,2,3,4,5])
+    sample = df.sample(n=4)
+
+    threshold = 0.06
+    for i in range(4):
+        if((sample.iloc[i,4]>threshold) or (sample.iloc[i,1]==500)):
+            vert_list[6].append(1)
+        else:
+            vert_list[6].append(0)
+    states.append(tuple(vert_list))
+    vert_list[5] = 'delay'
+    vert_list[6] = []
+    fileName = '../../experiments/' + date + '/' + pattern + '/' + vert_list[0] + '-' + vert_list[5] + '/response.csv'
+    df = pd.read_csv(fileName,usecols=[0,1,2,3,4,5])
+    sample = df.sample(n=5)
+
+    for i in range(4):
+        if((sample.iloc[i,4]>threshold) or (sample.iloc[i,1]==500)):
+            vert_list[6].append(1)
+        else:
+            vert_list[6].append(0)
+    states.append(tuple(vert_list))
+
+    counter[vert_list[0] + '-abort'] = 0
+    counter[vert_list[0] + '-delay'] = 0
+
+classifier = classifier.NeuralClassifier(12)
+
+nTrials = 5
+nExperiments = 1000
+total = nTrials * nExperiments
 done = 0
 
-rewardLearningTotal = []
-#rewardRandomTotal = []
-for trialno in range(trials):
-    rewardLearning = 0
-    rewardRandom = 0
+totalRewardsNetwork = []
+totalRewardsRandom = []
+for f in range(nTrials):
+    experimentRewardsNetwork = []
+    experimentRewardsRandom = []
+    for j in range(nExperiments):
+        sz = len(states)
+        for i in range(sz):
+            # preprocess state into [n_states, n_features]
+            params = []
+            # params[0] = states[6]
+            cb_pattern = states[i][1]
+            deps = states[i][4]
+            op_instance_ratio = states[i][2] / states[i][3]
+            params = [
+                cb_pattern,
+                deps,
+                op_instance_ratio
+            ]
+            #params.extend(states[i][6])
 
-    estimated=[]
-    count=[]
+            prob = classifier.get_action(tuple(params))
+            list_state = list(states[i])
+            list_state[7] = prob 
+            # list_state[7] is selection prob
+            states[i] = tuple(list_state)
 
-    for a in actions: 
-        estimated.append(0)
-        count.append(0)
-    for i in range(nExperiments):
-        # find best action 
-        max_index = estimated.index(max(estimated)) 
+        sorted_states = sorted(states, key = lambda x: x[7], reverse=True)
 
-        # assign probabilities
-        # choose max_index with 1-epsilon
-        # choose random with epsilon
-        # TODO: See if this makes sense in regards to: 1-epsilon, choose optimal based on estimated; epsilon, choose random
-        prob_actions = [epsilon/len(actions)] * len(actions) 
-        prob_actions[max_index] = prob_actions[max_index] + (1-epsilon)
-        # select action based on probabilites
-        act_index = np.random.choice(range(len(prob_actions)),p=prob_actions)
-        # for comparison
-        #random_action = np.random.choice(actions)
+        total_reward = 0
+        random_reward = 0
 
-        # get the reward
-        fileName = '../../Experiments/' + date + '/' + actions[act_index] + '/' + 'response.csv'
-        #randomFileName = '../../Experiments/'+date+'/'+pattern+'/'+random_action+'/'+'response.csv'
-        resultsDf = pd.read_csv(fileName,usecols=[0,1,2,3,4,5])
-        #randomDf = pd.read_csv(randomFileName,usecols=[0,1,2,3,4,5])
-        df_elements = resultsDf.sample(n=1)
-        #randomdf_elements = randomDf.sample(n=1)
+        episode_len = 5
+        for i in range(episode_len):
+            # network selection
+            state = sorted_states[i]
+            injection = state[0] + '-' + state[5]
+            df = pd.read_csv('../../experiments/' + date + '/' + pattern + '/' + injection + '/response.csv',   usecols=[0,1,2,3,4,5])
+            sample = df.sample(n=1)
 
-        threshold = 0.06
-        if((df_elements.iloc[0,4]>threshold) or (df_elements.iloc[0,1]==500)):
-            reward = 1
-            rewardLearning = rewardLearning + 1
-        else:
-            reward = 0
-        
-        #if((randomdf_elements.iloc[0,4]>threshold) or (randomdf_elements.iloc[0,1]==500)):
-        #    rewardRandom = rewardRandom + 1
-        
+            threshold = 0.06
+            if ((sample.iloc[0,4] > threshold) or (sample.iloc[0,1]==500)):
+                total_reward += 1
 
-        count[act_index] = count[act_index] + 1
-        estimated[act_index] = estimated[act_index] + (1/count[act_index])*(reward - estimated[act_index])
+            counter[injection] = counter[injection] + 1
 
-        done = done + 1
-        print(str((done/total)*100)+'%')
-    #with open('estimates.csv', 'w') as f:
-    #    wr = csv.writer(f, quoting=csv.QUOTE_ALL)
-    #    for i in range(len(actions)):
-    #        row = []
-    #        row.append(actions[i])
-    #        row.append(estimated[i])
-    #        row.append(count[i])
-    #        wr.writerow(row)
+            # random selection
+            injection = random.choice(injections)
+            df = pd.read_csv('../../experiments/' + date + '/' + pattern + '/' + injection + '/response.csv',   usecols=[0,1,2,3,4,5])
+            sample = df.sample(n=1)
 
-    rewardLearningTotal.append(rewardLearning)
-    #rewardRandomTotal.append(rewardRandom)
+            threshold = 0.06
+            if ((sample.iloc[0,4] > threshold) or (sample.iloc[0,1]==500)):
+                random_reward += 1
 
-#learningDF = pd.DataFrame({'Learning': rewardLearningTotal,'No learning': rewardRandomTotal})
-learningDF = pd.DataFrame({'Learning': rewardLearningTotal})
-learningDF.to_csv('bandit01.csv')
+
+        classifier.reward(float(total_reward))
+
+        experimentRewardsNetwork.append((total_reward/episode_len)*100)
+        experimentRewardsRandom.append((random_reward/episode_len)*100)
+
+        done = done + 1 
+        print(str((done/total)*100) + '%')
+
+    totalRewardsNetwork.append(statistics.mean(experimentRewardsNetwork))
+    totalRewardsRandom.append(statistics.mean(experimentRewardsRandom))
+
+print(counter)
+
+percDF = pd.DataFrame({'Network': totalRewardsNetwork,'Random': totalRewardsRandom})
+percDF.to_csv('experiment_results.csv')
