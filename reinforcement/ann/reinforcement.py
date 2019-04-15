@@ -73,9 +73,8 @@ for vertex in dep_graph.vertices():
     counter[vert_list[0] + '-abort'] = 0
     counter[vert_list[0] + '-delay'] = 0
 
-classifier = classifier.NeuralClassifier(12)
 
-nTrials = 20
+nTrials = 25
 nExperiments = 25000
 total = nTrials * nExperiments
 done = 0
@@ -83,6 +82,8 @@ done = 0
 totalRewardsNetwork = []
 totalRewardsRandom = []
 for f in range(nTrials):
+    classifier = classifier.NeuralClassifier(12)
+
     experimentRewardsNetwork = []
     experimentRewardsRandom = []
     for j in range(nExperiments):
@@ -97,7 +98,7 @@ for f in range(nTrials):
             params = [
                 cb_pattern,
                 deps,
-                op_instance_ratio
+                #op_instance_ratio
             ]
             #params.extend(states[i][6])
 
@@ -117,29 +118,77 @@ for f in range(nTrials):
             # network selection
             state = sorted_states[i]
             injection = state[0] + '-' + state[5]
-            df = pd.read_csv('../../experiments/' + date + '/' + pattern + '/' + injection + '/response.csv',   usecols=[0,1,2,3,4,5])
+            df = pd.read_csv('../../decisionengine/data_service/a1/' + date + '/' + pattern + '/' + injection + '.csv',   usecols=[0,1,2])
+            sample = df.sample(n=1)
+
+            #history_changed = False
+            threshold = 0.06
+            if ((sample.iloc[0,2] > threshold) or (sample.iloc[0,1]==500)):
+                total_reward += 1
+            #    for state_orig in states:
+            #        if sorted_states[i][0] == state_orig[0]:
+            #            state_orig[6][0] = state[6][1]
+            #            state_orig[6][1] = state[6][2]
+            #            state_orig[6][2] = state[6][3]
+            #            state_orig[6][3] = 1
+            #            history_changed = True
+            #            continue
+            #else:
+            #    for state_orig in states:
+            #        if sorted_states[i][0] == state_orig[0]:
+            #            state_orig[6][0] = state[6][1]
+            #            state_orig[6][1] = state[6][2]
+            #            state_orig[6][2] = state[6][3]
+            #            state_orig[6][3] = 0
+            #            history_changed = True
+            #            continue
+
+            df = pd.read_csv('../../decisionengine/data_service/a2/' + date + '/' + pattern + '/' + injection + '.csv',   usecols=[0,1,2])
             sample = df.sample(n=1)
 
             threshold = 0.06
-            if ((sample.iloc[0,4] > threshold) or (sample.iloc[0,1]==500)):
+            if ((sample.iloc[0,2] > threshold) or (sample.iloc[0,1]==500)):
                 total_reward += 1
-
+            #    if history_changed == False:
+            #        for state_orig in states:
+            #            if sorted_states[i][0] == state_orig[0]:
+            #                state_orig[6][0] = state[6][1]
+            #                state_orig[6][1] = state[6][2]
+            #                state_orig[6][2] = state[6][3]
+            #                state_orig[6][3] = 1
+            #                continue
+            #else:
+            #    if history_changed == False:
+            #        for state_orig in states:
+            #            if sorted_states[i][0] == state_orig[0]:
+            #                state_orig[6][0] = state[6][1]
+            #                state_orig[6][1] = state[6][2]
+            #                state_orig[6][2] = state[6][3]
+            #                state_orig[6][3] = 0
+            #                continue
             counter[injection] = counter[injection] + 1
 
             # random selection
             injection = random.choice(injections)
-            df = pd.read_csv('../../experiments/' + date + '/' + pattern + '/' + injection + '/response.csv',   usecols=[0,1,2,3,4,5])
+            df = pd.read_csv('../../decisionengine/data_service/a1/' + date + '/' + pattern + '/' + injection + '.csv',   usecols=[0,1,2])
             sample = df.sample(n=1)
 
             threshold = 0.06
-            if ((sample.iloc[0,4] > threshold) or (sample.iloc[0,1]==500)):
+            if ((sample.iloc[0,2] > threshold) or (sample.iloc[0,1]==500)):
+                random_reward += 1
+
+            df = pd.read_csv('../../decisionengine/data_service/a2/' + date + '/' + pattern + '/' + injection + '.csv',   usecols=[0,1,2])
+            sample = df.sample(n=1)
+
+            threshold = 0.06
+            if ((sample.iloc[0,2] > threshold) or (sample.iloc[0,1]==500)):
                 random_reward += 1
 
 
         classifier.reward(float(total_reward))
 
-        experimentRewardsNetwork.append((total_reward/episode_len)*100)
-        experimentRewardsRandom.append((random_reward/episode_len)*100)
+        experimentRewardsNetwork.append((total_reward/(2*episode_len))*100)
+        experimentRewardsRandom.append((random_reward/(2*episode_len))*100)
 
         done = done + 1 
         print(str((done/total)*100) + '%')
@@ -150,4 +199,4 @@ for f in range(nTrials):
 print(counter)
 
 percDF = pd.DataFrame({'Network': totalRewardsNetwork,'Random': totalRewardsRandom})
-percDF.to_csv('experiment_results_1.csv')
+percDF.to_csv('experiment_results_double_11.csv')
