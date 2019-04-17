@@ -74,7 +74,7 @@ for vertex in dep_graph.vertices():
     counter[vert_list[0] + '-delay'] = 0
 
 
-nTrials = 25
+nTrials = 5
 nExperiments = 25000
 total = nTrials * nExperiments
 done = 0
@@ -82,7 +82,7 @@ done = 0
 totalRewardsNetwork = []
 totalRewardsRandom = []
 for f in range(nTrials):
-    classifier = classifier.NeuralClassifier(12)
+    nclass = classifier.NeuralClassifier(12)
 
     experimentRewardsNetwork = []
     experimentRewardsRandom = []
@@ -102,7 +102,7 @@ for f in range(nTrials):
             ]
             #params.extend(states[i][6])
 
-            prob = classifier.get_action(tuple(params))
+            prob = nclass.get_action(tuple(params))
             list_state = list(states[i])
             list_state[7] = prob 
             # list_state[7] is selection prob
@@ -125,21 +125,21 @@ for f in range(nTrials):
             threshold = 0.06
             if ((sample.iloc[0,2] > threshold) or (sample.iloc[0,1]==500)):
                 total_reward += 1
-            #    for state_orig in states:
-            #        if sorted_states[i][0] == state_orig[0]:
-            #            state_orig[6][0] = state[6][1]
-            #            state_orig[6][1] = state[6][2]
-            #            state_orig[6][2] = state[6][3]
-            #            state_orig[6][3] = 1
+            #    for j in range(len(states)):
+            #        if sorted_states[i][0] == states[j][0]:
+            #            states[j][6][0] = state[6][1]
+            #            states[j][6][1] = state[6][2]
+            #            states[j][6][2] = state[6][3]
+            #            states[j][6][3] = 1
             #            history_changed = True
             #            continue
             #else:
-            #    for state_orig in states:
-            #        if sorted_states[i][0] == state_orig[0]:
-            #            state_orig[6][0] = state[6][1]
-            #            state_orig[6][1] = state[6][2]
-            #            state_orig[6][2] = state[6][3]
-            #            state_orig[6][3] = 0
+            #    for j in range(len(states)):
+            #        if sorted_states[i][0] == states[j][0]:
+            #            states[j][6][0] = state[6][1]
+            #            states[j][6][1] = state[6][2]
+            #            states[j][6][2] = state[6][3]
+            #            states[j][6][3] = 0
             #            history_changed = True
             #            continue
 
@@ -150,21 +150,21 @@ for f in range(nTrials):
             if ((sample.iloc[0,2] > threshold) or (sample.iloc[0,1]==500)):
                 total_reward += 1
             #    if history_changed == False:
-            #        for state_orig in states:
-            #            if sorted_states[i][0] == state_orig[0]:
-            #                state_orig[6][0] = state[6][1]
-            #                state_orig[6][1] = state[6][2]
-            #                state_orig[6][2] = state[6][3]
-            #                state_orig[6][3] = 1
+            #        for j in range(len(states)):
+            #            if sorted_states[i][0] == states[j][0]:
+            #                states[j][6][0] = state[6][1]
+            #                states[j][6][1] = state[6][2]
+            #                states[j][6][2] = state[6][3]
+            #                states[j][6][3] = 1
             #                continue
             #else:
             #    if history_changed == False:
-            #        for state_orig in states:
-            #            if sorted_states[i][0] == state_orig[0]:
-            #                state_orig[6][0] = state[6][1]
-            #                state_orig[6][1] = state[6][2]
-            #                state_orig[6][2] = state[6][3]
-            #                state_orig[6][3] = 0
+            #        for j in range(len(states)):
+            #            if sorted_states[i][0] == states[j][0]:
+            #                states[j][6][0] = state[6][1]
+            #                states[j][6][1] = state[6][2]
+            #                states[j][6][2] = state[6][3]
+            #                states[j][6][3] = 0
             #                continue
             counter[injection] = counter[injection] + 1
 
@@ -185,7 +185,7 @@ for f in range(nTrials):
                 random_reward += 1
 
 
-        classifier.reward(float(total_reward))
+        nclass.reward(float(total_reward))
 
         experimentRewardsNetwork.append((total_reward/(2*episode_len))*100)
         experimentRewardsRandom.append((random_reward/(2*episode_len))*100)
@@ -199,4 +199,4 @@ for f in range(nTrials):
 print(counter)
 
 percDF = pd.DataFrame({'Network': totalRewardsNetwork,'Random': totalRewardsRandom})
-percDF.to_csv('experiment_results_double_11.csv')
+percDF.to_csv('experiment_results_double_13.csv')
