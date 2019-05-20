@@ -119,7 +119,7 @@ def run_experiment(arch,metrics,mocker,algorithm):
                 result = mocker.lookup_result(arch,fault_injection)
                 if result > 0:
                     result = 1
-                    metrics['ER-R1'][algorithm.name][faults_to_find][-1] += result
+                    metrics['ER-R1'][algorithm.name][faults_to_find][-1] += 1
                 algorithm.result(result)
                 done += 1
                 if done % 100 == 0:
@@ -132,7 +132,7 @@ def run_experiment(arch,metrics,mocker,algorithm):
                 fault_injection = algorithm.get_action()
                 result = mocker.lookup_result(arch,fault_injection)
                 if result > 0:
-                    metrics['ER-R2'][algorithm.name][faults_to_find][-1] += result
+                    metrics['ER-R2'][algorithm.name][faults_to_find][-1] += 1
                 algorithm.result(result)
                 done += 1
                 if done % 100 == 0:
