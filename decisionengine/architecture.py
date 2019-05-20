@@ -1,17 +1,64 @@
 import json
-
 class Architecture:
-    def __init__(self, archJson):
+    def __init__(self, archJson, patterns):
         with open(archJson, "r") as f:
-            self.arch = json.load(f)
-            self.microservices = []
-            for ms in self.arch["microservices"]:
-                self.microservices.append(Microservice(ms))
-            for ms in self.microservices:
+            arch = json.load(f)
+            self.services = []
+            for ms in arch["microservices"]:
+                self.services.append(Microservice(ms))
+            for ms in self.services:
                 for op in ms.operations:
-                    op.init_dependencies(self.microservices)
+                    op.init_dependencies(self.services)
 
+        self.patterns = patterns 
 
+        for i in range(len(self.services)):
+            for j in range(len(self.services[i].operations)):
+                if self.services[i].operations[j].name + 'true' in patterns:
+                    cb = CircuitBreaker(arch["microservices"][i]['operations'][j]['circuitBreaker'])
+                    
+                    ops = []
+                    ops.append(self.services[i].operations[j])
+                    seen = [self.services[i].operations[j]]
+
+                    while len(ops) > 0:
+                        operation = ops.pop()
+                        for dep in operation.dependencies:
+                            ops.append(dep.operation)
+                            seen.append(dep.operation)
+                            dep.operation.circuitbreaker = cb 
+
+    def get_operations(self):
+        operations = []
+        for service in self.services:
+            for operation in service.operations: 
+                operations.append(operation)
+        return operations
+    
+    def get_incoming_dependencies(self,operation):
+        operations = set()
+        for service in self.services:
+            for op in service.operations:
+                for dep in op.dependencies:
+                    if dep.operation.name == operation.name and op.name not in ['a1','a2']:
+                        operations.add(op)
+
+        return list(operations)
+    def to_string(self):
+        results = self.patterns + "\n"
+        results = results + "Services \n"
+        for service in self.services:
+            results = results + service.name + "\n"
+            for operation in service.operations:
+                if operation.circuitbreaker:
+
+                    results = results + operation.name + " " + str(operation.circuitbreaker.rollingwindow) + ", "
+                else:
+                    results = results + operation.name + ", "
+                for dep in operation.dependencies:
+                    results = results + dep.operation.name + " "
+                results = results + "\n"
+        return results
 class Microservice:
     def __init__(self,ms):
         self.name = ms['name']
@@ -34,7 +81,7 @@ class Operation:
         self.service = ms
         self.name = operation['name']
         self.demand = operation['demand']
-        self.circuitbreaker = CircuitBreaker(operation['circuitBreaker'])
+        self.circuitbreaker = None # CircuitBreaker(operation['circuitBreaker'])
         self.dependencies = []
         for dp in operation['dependencies']:
             self.dependencies.append(Dependency(dp))
@@ -51,7 +98,12 @@ class CircuitBreaker:
             self.errorthresholdpercentage = cb['errorThresholdPercentage']
             self.timeout = cb['timeout'] 
             self.sleepwindow = cb['sleepWindow'] 
-
+        else:
+            self.rollingWindow = None 
+            self.requestvolumethreshold = None 
+            self.errorthresholdpercentage = None 
+            self.timeout = None 
+            self.sleepwindow = None
 class Dependency:
     def __init__(self,dp):
         self.service = dp['service'] # TODO get the correct service from the architecture
@@ -72,14 +124,9 @@ class Dependency:
                 for op in ms.operations:
                     if op.name ==name_op:
                         self.operation = op
-                        return
+                        return op
                 raise Exception("Couldnt find the operation: " + name_op)
 
         raise Exception("Couldn't find the microservice: " + name_ms)
 
 
-
-def new(path):
-    """ returns a new Architecture object from the provided model json
-    """
-    return Architecture(path)

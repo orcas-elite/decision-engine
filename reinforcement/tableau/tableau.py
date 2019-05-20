@@ -1,10 +1,9 @@
 import numpy as np 
 
 class TableauClassifier(object):
-    def __init__(self, epsilon, gamma, learning_rate, initial_q, action_size):
+    def __init__(self, epsilon, gamma, initial_q, action_size):
         self.epsilon = epsilon
         self.gamma = gamma 
-        self.learning_rate = learning_rate 
         self.action_size = action_size
         self.states = {}
         self.initial_q = initial_q

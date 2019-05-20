@@ -1,0 +1,88 @@
+{
+  "chaoslib-version": "1.0.0",
+  "platform": "Darwin-18.2.0-x86_64-i386-64bit",
+  "node": "s-8d3a38ca.on.site.uni-stuttgart.de",
+  "experiment": {
+    "title": "chaosExperiment",
+    "version": "1.0.0",
+    "description": "Generated experiment",
+    "steady-state-hypothesis": {
+      "title": "ssh",
+      "probes": [
+        {
+          "type": "probe",
+          "tolerance": "0",
+          "name": "mock-results",
+          "provider": {
+            "type": "python",
+            "module": "chaosmock",
+            "func": "get_result",
+            "arguments": {
+              "service": "C",
+              "operation": "c2",
+              "action": "delay",
+              "hystrix": "a1false-a2false-b1false-c1false"
+            }
+          }
+        }
+      ]
+    },
+    "method": [
+      {
+        "type": "action",
+        "name": "print-experiment",
+        "provider": {
+          "type": "python",
+          "module": "chaosmock",
+          "func": "print_experiment",
+          "arguments": {
+            "service": "C",
+            "operation": "c2",
+            "action": "delay",
+            "hystrix": "a1false-a2false-b1false-c1false"
+          }
+        }
+      }
+    ],
+    "dry": false
+  },
+  "start": "2019-03-14T13:32:33.570877",
+  "status": "failed",
+  "deviated": false,
+  "steady_states": {
+    "before": {
+      "steady_state_met": false,
+      "probes": [
+        {
+          "activity": {
+            "type": "probe",
+            "tolerance": "0",
+            "name": "mock-results",
+            "provider": {
+              "type": "python",
+              "module": "chaosmock",
+              "func": "get_result",
+              "arguments": {
+                "service": "C",
+                "operation": "c2",
+                "action": "delay",
+                "hystrix": "a1false-a2false-b1false-c1false"
+              }
+            }
+          },
+          "output": "1",
+          "status": "succeeded",
+          "start": "2019-03-14T13:32:33.571833",
+          "end": "2019-03-14T13:32:33.664049",
+          "duration": 0.092216,
+          "tolerance_met": false
+        }
+      ]
+    },
+    "after": null
+  },
+  "run": [],
+  "rollbacks": [],
+  "end": "2019-03-14T13:32:33.664946",
+  "duration": 0.11907482147216797
+}

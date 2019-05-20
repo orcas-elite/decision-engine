@@ -82,7 +82,7 @@ done = 0
 totalRewardsNetwork = []
 totalRewardsRandom = []
 for f in range(nTrials):
-    classi = classifier.TableauClassifier(0.1, 0.99, 0.66, 5, 25)
+    classi = classifier.TableauClassifier(0.1, 0.99, 5, 25)
 
     experimentRewardsNetwork = []
     experimentRewardsRandom = []
