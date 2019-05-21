@@ -4,10 +4,15 @@ from algorithms import *
 import time
 from multiprocessing.dummy import Pool as ThreadPool 
 from functools import partial
+import statistics
+import matplotlib.pyplot as plt
+import matplotlib.ticker as mtick
+import seaborn as sns
+import csv
 
 # define architectures
 def init_architectures():
-    patterns = ['a1false-a2false-b1false-c1false','a1true-a2false-b1false-c1false','a1false-a2true-b1false-c1false',    'a1true-a2true-b1false-c1false']
+    patterns = ['a1true-a2false-b1false-c1false','a1false-a2true-b1false-c1false']#['a1false-a2false-b1false-c1false','a1true-a2false-b1false-c1false','a1false-a2true-b1false-c1false', 'a1true-a2true-b1false-c1false']
 
     architectures = []
     for pattern in patterns:
@@ -52,136 +57,357 @@ def main():
     archMetrics = {}
     for archi in architectures:
         algorithms = []
-        algorithms.append(RandomAlgorithm(archi,[]))
-        algorithms.append(BanditEpsilonAlgorithm(archi,[0.5,0.99,0.1]))
-        algorithms.append(BanditOptimisticAlgorithm(archi,[5]))
-        algorithms.append(QLearningAlgorithm(archi,[0.2, 0.99, 0.66, 5]))
 
         metrics = {}
-        metrics['ER-R1'] = {}
+        metrics['ER-R1'] = {} 
         metrics['ER-R2'] = {}
-        metrics['FDR'] = {}
-        metrics['WFDR'] = {}
+        metrics['FDR-R1'] = {}
+        metrics['FDR-R2'] = {}
+        metrics['WFDR-R1'] = {}
+        metrics['WFDR-R2'] = {}
+        metrics['OPERATIONS-R1'] = {}
+        metrics['OPERATIONS-R2'] = {} 
         metrics['TIME'] = {}
-        
+        metrics['INIT_TIME'] = {} 
+
+        start_time = int(time.time() * 1000)
+        algorithms.append(RandomAlgorithm(archi,[]))
+        metrics['INIT_TIME']['random'] = int(time.time() * 1000) - start_time 
+        start_time = int(time.time() * 1000)
+        algorithms.append(BanditEpsilonAlgorithm(archi,[0.5,0.99,0.1]))
+        metrics['INIT_TIME']['bandit-epsilon'] = int(time.time() * 1000) - start_time 
+        start_time = int(time.time() * 1000)
+        algorithms.append(BanditOptimisticAlgorithm(archi,[5]))
+        metrics['INIT_TIME']['bandit-optimistic'] = int(time.time() * 1000) - start_time 
+        start_time = int(time.time() * 1000)
+        algorithms.append(QLearningAlgorithm(archi,[0.2, 0.99, 0.66, 5]))
+        metrics['INIT_TIME']['qlearning'] = int(time.time() * 1000) - start_time
+
+        start_time = int(time.time() * 1000)
+        algorithms.append(TableauAlgorithm(archi,[0.4, 0.99, 5, 0.1,5]))
+        metrics['INIT_TIME']['tableau'] = int(time.time() * 1000) - start_time
+        start_time = int(time.time() * 1000)
+        algorithms.append(NeuralNetworkAlgorithm(archi,[12]))
+        metrics['INIT_TIME']['neuralnetwork'] = int(time.time() * 1000) - start_time
+
         pool = ThreadPool(len(algorithms))
         pool.map(partial(run_experiment,archi,metrics,mocker), algorithms)
         pool.close()
         pool.join()
         
         archMetrics[archi.patterns] = metrics
+        generate_ouptput(metrics,archi)
 
 def run_experiment(arch,metrics,mocker,algorithm):
+    runs = 10
+    faults_to_find = 1000
+    experiments_to_run = 2000 # 5000
 
-    metrics['ER-R1'][algorithm.name] = {}
-    metrics['ER-R2'][algorithm.name] = {}
-    metrics['FDR'][algorithm.name] = {}
-    metrics['WFDR'][algorithm.name] = {}
-    metrics['TIME'][algorithm.name] = {}
 
-    # ER
-    runs = 5
-    faults_to_find_all = [50]#,100,200,500,1000,5000]
-    # FDR AND WFDR
-    fault_injections_all = [50]#,100,200,500,1000,5000]
-
-    total_faults_to_find = runs
-    total_fault_injections = runs
-    for num in faults_to_find_all:
-        total_faults_to_find = total_faults_to_find * num 
-    for num in fault_injections_all: 
-        total_fault_injections = total_fault_injections * num
-    total = (total_faults_to_find + total_fault_injections) * 2
+    total = (runs * (faults_to_find + experiments_to_run)) * 2
     done = 0
 
+    injection_results_R1 = []
+    injection_selections_R1 = []
+    injection_results_R2 = []
+    injection_selections_R2 = []
 
     for run in range(runs):
-        for faults_to_find in faults_to_find_all:
-            if faults_to_find not in metrics['ER-R1'][algorithm.name].keys():
-                metrics['ER-R1'][algorithm.name][faults_to_find] = [0]
-            else:
-                metrics['ER-R1'][algorithm.name][faults_to_find].append(0)
-            
-            if 'ER-R1' not in metrics['TIME'][algorithm.name].keys():
-                metrics['TIME'][algorithm.name]['ER-R1'] = []
+        injection_results_R1.append({'ER': [], 'WFDR': []})
+        injection_results_R2.append({'ER': [], 'WFDR': []})
 
-            if faults_to_find not in metrics['ER-R2'][algorithm.name].keys():
-                metrics['ER-R2'][algorithm.name][faults_to_find] = [0]
-            else:
-                metrics['ER-R2'][algorithm.name][faults_to_find].append(0)
-            
-            if 'ER-R2' not in metrics['TIME'][algorithm.name].keys():
-                metrics['TIME'][algorithm.name]['ER-R2'] = []
-
-            time_start = int(time.time() * 1000)
-            for i in range(faults_to_find):
-                fault_injection = algorithm.get_action()
-                result = mocker.lookup_result(arch,fault_injection)
-                if result > 0:
-                    result = 1
-                    metrics['ER-R1'][algorithm.name][faults_to_find][-1] += 1
-                algorithm.result(result)
-                done += 1
-                if done % 100 == 0:
-                    print("Progress (" + algorithm.name + "):" + str(round((done / total) * 100,2)) + "%")
-            metrics['TIME'][algorithm.name]['ER-R1'].append(int(time.time() * 1000) - time_start)
-            algorithm.reset()
-
-            time_start = int(time.time() * 1000)
-            for i in range(faults_to_find):
-                fault_injection = algorithm.get_action()
-                result = mocker.lookup_result(arch,fault_injection)
-                if result > 0:
-                    metrics['ER-R2'][algorithm.name][faults_to_find][-1] += 1
-                algorithm.result(result)
-                done += 1
-                if done % 100 == 0:
-                    print("Progress (" + algorithm.name + "):" + str(round((done / total) * 100,2)) + "%")
-            metrics['TIME'][algorithm.name]['ER-R2'].append(int(time.time() * 1000) - time_start)
-            algorithm.reset()
-
-        for fault_injections in fault_injections_all: 
-            if fault_injections not in metrics['FDR'][algorithm.name].keys():
-                metrics['FDR'][algorithm.name][fault_injections] = [0]
+        injection_selections_R1.append({'ER': {}, 'WFDR': {}})
+        injection_selections_R2.append({'ER': {}, 'WFDR': {}})
+        
+        i = 0
+        while i < faults_to_find:
+            fault_injection = algorithm.get_action()
+            if fault_injection in injection_selections_R1[run]['ER'].keys():
+                injection_selections_R1[run]['ER'][fault_injection] += 1
             else: 
-                metrics['FDR'][algorithm.name][fault_injections].append(0)
-            if fault_injections not in metrics['WFDR'][algorithm.name].keys():
-                metrics['WFDR'][algorithm.name][fault_injections] = [0]
+                injection_selections_R1[run]['ER'][fault_injection] = 0 
+            result = mocker.lookup_result(arch,fault_injection)
+            injection_results_R1[run]['ER'].append(result)
+
+            if result > 0:
+                i += 1
+                done += 1
+                algorithm.result(1)
+            else:
+                algorithm.result(0)
+            if done % 100 == 0:
+                print("Progress (" + algorithm.name + "):" + str(round((done / total) * 100,2)) + "%")
+        algorithm.reset() 
+
+        i = 0
+        while i < faults_to_find:
+            fault_injection = algorithm.get_action()
+            if fault_injection in injection_selections_R2[run]['ER'].keys():
+                injection_selections_R2[run]['ER'][fault_injection] += 1
             else: 
-                metrics['WFDR'][algorithm.name][fault_injections].append(0)
-            if 'FDR' not in metrics['TIME'][algorithm.name].keys():
-                metrics['TIME'][algorithm.name]['FDR'] = []
-            if 'WFDR' not in metrics['TIME'][algorithm.name].keys():
-                metrics['TIME'][algorithm.name]['WFDR'] = []
-
-
-            time_start = int(time.time() * 1000)
-            for i in range(faults_to_find):
-                fault_injection = algorithm.get_action()
-                result = mocker.lookup_result(arch,fault_injection)
-                if result > 0:
-                    result = 1
-                    metrics['FDR'][algorithm.name][faults_to_find][-1] += result
-                algorithm.result(result)
+                injection_selections_R2[run]['ER'][fault_injection] = 0 
+            result = mocker.lookup_result(arch,fault_injection)
+            injection_results_R2[run]['ER'].append(result)
+            if result > 0:
                 done += 1
-                if done % 10 == 0:
-                    print("Progress (" + algorithm.name + "):" + str((done / total) * 100) + "%")
-            metrics['TIME'][algorithm.name]['FDR'].append(int(time.time() * 1000) - time_start) 
-            algorithm.reset()
+                i += 1
+            algorithm.result(result)
+            if done % 100 == 0:
+                print("Progress (" + algorithm.name + "):" + str(round((done / total) * 100,2)) + "%")
+        algorithm.reset() 
 
-            time_start = int(time.time() * 1000) 
-            for i in range(faults_to_find):
-                fault_injection = algorithm.get_action()
-                result = mocker.lookup_result(arch,fault_injection)
-                if result > 0:
-                    metrics['WFDR'][algorithm.name][faults_to_find][-1] += result
-                algorithm.result(result)
-                done += 1
-                if done % 10 == 0:
-                    print("Progress (" + algorithm.name + "):" + str((done / total) * 100) + "%")
-            metrics['TIME'][algorithm.name]['WFDR'].append(int(time.time() * 1000) - time_start)
-            algorithm.reset()
-    print(metrics)
+        for i in range(experiments_to_run):
+            fault_injection = algorithm.get_action()
+            if fault_injection in injection_selections_R1[run]['WFDR'].keys():
+                injection_selections_R1[run]['WFDR'][fault_injection] += 1
+            else: 
+                injection_selections_R1[run]['WFDR'][fault_injection] = 0 
+            result = mocker.lookup_result(arch,fault_injection)
+            injection_results_R1[run]['WFDR'].append(result)
+            if result > 0:
+                algorithm.result(1)
+            else:
+                algorithm.result(0)
+            done += 1
+            if done % 100 == 0:
+                print("Progress (" + algorithm.name + "):" + str(round((done / total) * 100,2)) + "%")
+        algorithm.reset() 
+
+        for i in range(experiments_to_run):
+            fault_injection = algorithm.get_action()
+            if fault_injection in injection_selections_R2[run]['WFDR'].keys():
+                injection_selections_R2[run]['WFDR'][fault_injection] += 1
+            else: 
+                injection_selections_R2[run]['WFDR'][fault_injection] = 0 
+            result = mocker.lookup_result(arch,fault_injection)
+            injection_results_R2[run]['WFDR'].append(result)
+            algorithm.result(result)
+            done += 1
+            if done % 100 == 0:
+                print("Progress (" + algorithm.name + "):" + str(round((done / total) * 100,2)) + "%")
+        algorithm.reset() 
+
+    metrics['ER-R1'][algorithm.name] = compute_ER(injection_results_R1,faults_to_find) 
+    metrics['ER-R2'][algorithm.name] = compute_ER(injection_results_R2,faults_to_find)
+    metrics['FDR-R1'][algorithm.name] = compute_FDR(injection_results_R1,experiments_to_run)
+    metrics['FDR-R2'][algorithm.name] = compute_FDR(injection_results_R2,experiments_to_run)
+    metrics['WFDR-R1'][algorithm.name] = compute_WFDR(injection_results_R1,experiments_to_run) 
+    metrics['WFDR-R2'][algorithm.name] = compute_WFDR(injection_results_R2,experiments_to_run) 
+    metrics['OPERATIONS-R1'][algorithm.name] = compute_operations_counter(injection_selections_R1)
+    metrics['OPERATIONS-R2'][algorithm.name] = compute_operations_counter(injection_selections_R2)
+
+def compute_ER(data,limit):
+    thresholds = [] # [50,200,500,1000,2000]
+    threshold = 10 
+    while threshold <= limit: 
+        thresholds.append(threshold)
+        threshold += 10
+    result = {}
+    for threshold in thresholds:
+        result[threshold] = []
+    for run in data:
+        for threshold in thresholds:
+            counter = 0 
+            len_data = len(run['ER'])
+            for i in range(len_data):
+                if run['ER'][i] > 0:
+                    counter += 1
+                if counter == threshold:
+                    result[threshold].append(i+1)
+                    break 
+            
+
+    for threshold in thresholds:
+        result[threshold] = statistics.mean(result[threshold]) 
+
+    return result 
+
+def compute_FDR(data,total):
+    threshold = 10
+    thresholds = []
+    while threshold <= total:
+        thresholds.append(threshold)
+        threshold += 10
+
+    result = {}
+    for threshold in thresholds:
+        result[threshold] = []
+    for run in data:
+        for threshold in thresholds:
+            counter = 0 
+            len_data = len(run['WFDR'])
+            for i in range(len_data):
+                if run['WFDR'][i] > 0:
+                    counter += 1
+                if i+1 in thresholds:
+                    result[i+1].append(counter)
+            
+
+
+    return result 
+
+def compute_WFDR(data,total):
+    threshold = 10
+    thresholds = []
+    while threshold <= total:
+        thresholds.append(threshold)
+        threshold += 10
+
+    result = {}
+    for threshold in thresholds:
+        result[threshold] = []
+    for run in data:
+        for threshold in thresholds:
+            counter = 0 
+            len_data = len(run['WFDR'])
+            for i in range(len_data):
+                counter += run['WFDR'][i]
+                if i+1 in thresholds:
+                    result[i+1].append(counter)
+            
+
+
+    return result 
+
+def compute_operations_counter(data):
+    result = []
+    for run in range(len(data)):
+        result.append(data[run]['WFDR'])
+    return result
+
+def generate_ouptput(metrics,archi):
+    ER1 = metrics['ER-R1']
+    ER2 = metrics['ER-R2']
+    FDR1 = metrics['FDR-R1']
+    FDR2 = metrics['FDR-R2']
+    WFDR1 = metrics['WFDR-R1']
+    WFDR2 = metrics['WFDR-R2']
+    TIME = metrics['TIME']
+    INIT_TIME = metrics['INIT_TIME']
+    OPERATIONS1 = metrics['OPERATIONS-R1']
+    OPERATIONS2 = metrics['OPERATIONS-R2']
+
+    visualize_er([ER1,ER2],archi)
+
+    visualize_fdr([FDR1,FDR2],archi,'FDR')
+    visualize_fdr([WFDR1,WFDR2],archi,'WFDR')
+
+    table_counter([OPERATIONS1, OPERATIONS2], archi)
+    # what to do:
+    # Visualize ER1 and ER2 for all data points, use boxplots 
+    # Visualize FDR and WFDR with box plots 
+    # Visualize FDR with a line plot, faults found / experiments run 
+    # Visualize TIME as box plots, adjust to per experiment by dividing through total 
+    # Visualize INIT_TIME as box plots
+
+
+def visualize_er(data,archi):
+    patterns = archi.patterns 
+
+
+    for i in range(len(data)):
+
+        for algorithm in data[i].keys():
+            xvals = sorted(data[i][algorithm].keys()) 
+            yvals = [] 
+            for key in xvals:
+                yvals.append(data[i][algorithm][key]) 
+
+            plt.plot(xvals,yvals,label = algorithm)
+        
+        plt.title('ER for ' + patterns + ', reward function ' + str(i+1))
+        plt.xlabel('faults_found')
+        plt.ylabel('experiments_run') 
+        plt.legend(loc='best')
+        path = './figures/' + patterns + '-' + str(i+1) + '-ER-line.png' 
+        plt.savefig(path)
+        plt.close()
+
+def visualize_fdr(data,archi,yaxis):
+    patterns = archi.patterns 
+
+    for i in range(len(data)):  
+        for algorithm in data[i].keys():
+            xvals = sorted(data[i][algorithm].keys()) 
+            yvals = [] 
+            for key in xvals:
+                yvals.append(statistics.mean(data[i][algorithm][key]))   
+            plt.plot(xvals,yvals,label = algorithm) 
+        plt.title(yaxis + ' for ' + patterns + ', reward function ' + str(i+1))
+        plt.xlabel('experiments_run')
+        plt.ylabel(yaxis) 
+        plt.legend(loc='best')
+        path = './figures/' + patterns + '-' + str(i+1) + '-' + yaxis + '-line.png'
+        plt.savefig(path)
+        plt.close()
+
+
+
+        labels = data[i].keys()
+        data_all = []
+        for algorithm in labels:
+            max_key = max(data[i][algorithm].keys())
+            data_all.append(data[i][algorithm][max_key]) 
+
+        sns.set_style("whitegrid")
+        ax = sns.boxplot(data=data_all,sym='',palette="Greys")
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['bottom'].set_visible(False)
+        ax.xaxis.set_ticks_position('none')
+        ax.yaxis.set_ticks_position('none')
+        ax.xaxis.set_ticklabels(labels)
+
+
+        ax.yaxis.set_label_text(yaxis + ' for ' + str(max_key) + ' experiments')
+        ax.set_title(yaxis + ' for ' + patterns + ', reward function ' + str(i+1))
+        formatter = mtick.ScalarFormatter(useOffset=False)
+        ax.yaxis.set_major_formatter(formatter)
+        path = './figures/' + patterns + '-' + str(i+1) + '-' + yaxis + '-box.png'
+        plt.savefig(path)
+        plt.close()
+        
+
+def table_counter(data, archi):
+    patterns = archi.patterns 
+
+    for i in range(len(data)):
+        result = {}
+        algorithms = sorted(data[i].keys())
+        for algorithm in algorithms:
+            run_results = {}
+            for run in data[i][algorithm]:
+                fault_injections = sorted(run.keys())
+                for fault_injection in fault_injections:
+                    if fault_injection in run_results.keys(): 
+                        run_results[fault_injection].append(run[fault_injection])
+                    else:
+                        run_results[fault_injection]=[run[fault_injection]]
+            
+            fault_injections = sorted(run_results.keys())
+            for fault_injection in fault_injections:
+                if fault_injection in result.keys():
+                    result[fault_injection].append(statistics.mean(run_results[fault_injection]))
+                else:
+                    result[fault_injection] = [statistics.mean(run_results[fault_injection])]
+        
+        csv_columns = ['fault-injection'] + algorithms 
+
+        csv_file = './figures/' + patterns + '-' + str(i+1) + '-counter.csv'
+        try:
+            with open(csv_file, 'w') as csvfile:
+                writer = csv.writer(csvfile, delimiter = ' ')
+                writer.writerow(csv_columns) 
+
+                fault_injections = sorted(result.keys())
+                for fault_injection in fault_injections:
+                    row = [fault_injection]
+                    for value in result[fault_injection]:
+                        row.append(str(value))
+                    writer.writerow(row)
+        except IOError:
+            print("I/O error")
+
 
 if __name__ == "__main__":
     main()
