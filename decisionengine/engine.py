@@ -38,7 +38,7 @@ class FaultInjector(object):
                             path = './data_service/' + 'a2' + '/' + self.date + '/' + patterns + '/' + faultinj +'.csv'
                             results_2 = pd.read_csv(path).sample(n=5000)
                             self.cached_results[patterns][faultinj] = {'a1': results_1, 'a2': results_2}
-    def lookup_result(self,architecture,faultinjection):
+    def inject_fault(self,architecture,faultinjection):
         patterns = architecture.patterns
         faults = 0
         for ip in ['a1','a2']:
@@ -67,29 +67,31 @@ def main():
         metrics['WFDR-R2'] = {}
         metrics['OPERATIONS-R1'] = {}
         metrics['OPERATIONS-R2'] = {} 
-        metrics['TIME'] = {}
+        metrics['TIME_GET'] = {}
+        metrics['TIME_RESULT'] = {}
         metrics['INIT_TIME'] = {} 
 
-        start_time = int(time.time() * 1000)
+        #start_time = int(time.time() * 1000)
         algorithms.append(RandomAlgorithm(archi,[]))
-        metrics['INIT_TIME']['random'] = int(time.time() * 1000) - start_time 
-        start_time = int(time.time() * 1000)
+        #metrics['INIT_TIME']['random'] = int(time.time() * 1000) - start_time 
+        #start_time = int(time.time() * 1000)
         algorithms.append(BanditEpsilonAlgorithm(archi,[0.5,0.99,0.1]))
-        metrics['INIT_TIME']['bandit-epsilon'] = int(time.time() * 1000) - start_time 
-        start_time = int(time.time() * 1000)
+        #metrics['INIT_TIME']['bandit-epsilon'] = int(time.time() * 1000) - start_time 
+        #start_time = int(time.time() * 1000)
         algorithms.append(BanditOptimisticAlgorithm(archi,[5]))
-        metrics['INIT_TIME']['bandit-optimistic'] = int(time.time() * 1000) - start_time 
-        start_time = int(time.time() * 1000)
-        algorithms.append(QLearningAlgorithm(archi,[0.2, 0.99, 0.66, 5]))
-        metrics['INIT_TIME']['qlearning'] = int(time.time() * 1000) - start_time
-
-        start_time = int(time.time() * 1000)
+        #metrics['INIT_TIME']['bandit-optimistic'] = int(time.time() * 1000) - start_time 
+        #start_time = int(time.time() * 1000)
+        #algorithms.append(QLearningAlgorithm(archi,[0.2, 0.99, 0.66, 5]))
+        #metrics['INIT_TIME']['qlearning'] = int(time.time() * 1000) - start_time
+        #start_time = int(time.time() * 1000)
         algorithms.append(TableauAlgorithm(archi,[0.4, 0.99, 5, 0.1,5]))
-        metrics['INIT_TIME']['tableau'] = int(time.time() * 1000) - start_time
-        start_time = int(time.time() * 1000)
+        #metrics['INIT_TIME']['tableau'] = int(time.time() * 1000) - start_time
+        #start_time = int(time.time() * 1000)
         algorithms.append(NeuralNetworkAlgorithm(archi,[12]))
-        metrics['INIT_TIME']['neuralnetwork'] = int(time.time() * 1000) - start_time
-
+        #metrics['INIT_TIME']['neuralnetwork'] = int(time.time() * 1000) - start_time
+        algorithms.append(BayesianLowAlgorithm(archi,[]))
+        algorithms.append(BayesianHighAlgorithm(archi,[])) 
+        algorithms.append(MLFQAlgorithm(archi,[5,200]))
         pool = ThreadPool(len(algorithms))
         pool.map(partial(run_experiment,archi,metrics,mocker), algorithms)
         pool.close()
@@ -99,9 +101,9 @@ def main():
         generate_ouptput(metrics,archi)
 
 def run_experiment(arch,metrics,mocker,algorithm):
-    runs = 10
-    faults_to_find = 1000
-    experiments_to_run = 2000 # 5000
+    runs = 50
+    faults_to_find = 500
+    experiments_to_run = 500 # 5000
 
 
     total = (runs * (faults_to_find + experiments_to_run)) * 2
@@ -111,22 +113,24 @@ def run_experiment(arch,metrics,mocker,algorithm):
     injection_selections_R1 = []
     injection_results_R2 = []
     injection_selections_R2 = []
-
+    injection_times_get = []
+    injection_times_result = []
     for run in range(runs):
         injection_results_R1.append({'ER': [], 'WFDR': []})
         injection_results_R2.append({'ER': [], 'WFDR': []})
 
         injection_selections_R1.append({'ER': {}, 'WFDR': {}})
         injection_selections_R2.append({'ER': {}, 'WFDR': {}})
-        
+        injection_times_get.append([])
+        injection_times_result.append([])
         i = 0
         while i < faults_to_find:
-            fault_injection = algorithm.get_action()
+            fault_injection = algorithm.get_experiment()
             if fault_injection in injection_selections_R1[run]['ER'].keys():
                 injection_selections_R1[run]['ER'][fault_injection] += 1
             else: 
                 injection_selections_R1[run]['ER'][fault_injection] = 0 
-            result = mocker.lookup_result(arch,fault_injection)
+            result = mocker.inject_fault(arch,fault_injection)
             injection_results_R1[run]['ER'].append(result)
 
             if result > 0:
@@ -141,12 +145,12 @@ def run_experiment(arch,metrics,mocker,algorithm):
 
         i = 0
         while i < faults_to_find:
-            fault_injection = algorithm.get_action()
+            fault_injection = algorithm.get_experiment()
             if fault_injection in injection_selections_R2[run]['ER'].keys():
                 injection_selections_R2[run]['ER'][fault_injection] += 1
             else: 
                 injection_selections_R2[run]['ER'][fault_injection] = 0 
-            result = mocker.lookup_result(arch,fault_injection)
+            result = mocker.inject_fault(arch,fault_injection)
             injection_results_R2[run]['ER'].append(result)
             if result > 0:
                 done += 1
@@ -157,29 +161,33 @@ def run_experiment(arch,metrics,mocker,algorithm):
         algorithm.reset() 
 
         for i in range(experiments_to_run):
-            fault_injection = algorithm.get_action()
+            start_time = int(time.time() * 1000)
+            fault_injection = algorithm.get_experiment()
+            injection_times_get[run].append(int(time.time() * 1000) - start_time)
             if fault_injection in injection_selections_R1[run]['WFDR'].keys():
                 injection_selections_R1[run]['WFDR'][fault_injection] += 1
             else: 
                 injection_selections_R1[run]['WFDR'][fault_injection] = 0 
-            result = mocker.lookup_result(arch,fault_injection)
+            result = mocker.inject_fault(arch,fault_injection)
             injection_results_R1[run]['WFDR'].append(result)
+            start_time = int(time.time() * 1000)
             if result > 0:
                 algorithm.result(1)
             else:
                 algorithm.result(0)
+            injection_times_result[run].append(int(time.time() * 1000) - start_time)
             done += 1
             if done % 100 == 0:
                 print("Progress (" + algorithm.name + "):" + str(round((done / total) * 100,2)) + "%")
         algorithm.reset() 
 
         for i in range(experiments_to_run):
-            fault_injection = algorithm.get_action()
+            fault_injection = algorithm.get_experiment()
             if fault_injection in injection_selections_R2[run]['WFDR'].keys():
                 injection_selections_R2[run]['WFDR'][fault_injection] += 1
             else: 
                 injection_selections_R2[run]['WFDR'][fault_injection] = 0 
-            result = mocker.lookup_result(arch,fault_injection)
+            result = mocker.inject_fault(arch,fault_injection)
             injection_results_R2[run]['WFDR'].append(result)
             algorithm.result(result)
             done += 1
@@ -195,6 +203,8 @@ def run_experiment(arch,metrics,mocker,algorithm):
     metrics['WFDR-R2'][algorithm.name] = compute_WFDR(injection_results_R2,experiments_to_run) 
     metrics['OPERATIONS-R1'][algorithm.name] = compute_operations_counter(injection_selections_R1)
     metrics['OPERATIONS-R2'][algorithm.name] = compute_operations_counter(injection_selections_R2)
+    metrics['TIME_GET'][algorithm.name] = compute_time(injection_times_get)
+    metrics['TIME_RESULT'][algorithm.name] = compute_time(injection_times_result)
 
 def compute_ER(data,limit):
     thresholds = [] # [50,200,500,1000,2000]
@@ -265,9 +275,17 @@ def compute_WFDR(data,total):
                 if i+1 in thresholds:
                     result[i+1].append(counter)
             
-
-
     return result 
+
+def compute_time(data):
+    total_sum = 0
+    total_len = 0
+    
+    for run in data:
+        total_len += len(run)
+        total_sum += sum(run) 
+    
+    return total_sum / total_len
 
 def compute_operations_counter(data):
     result = []
@@ -282,7 +300,8 @@ def generate_ouptput(metrics,archi):
     FDR2 = metrics['FDR-R2']
     WFDR1 = metrics['WFDR-R1']
     WFDR2 = metrics['WFDR-R2']
-    TIME = metrics['TIME']
+    TIME_GET = metrics['TIME_GET']
+    TIME_RESULT = metrics['TIME_RESULT']
     INIT_TIME = metrics['INIT_TIME']
     OPERATIONS1 = metrics['OPERATIONS-R1']
     OPERATIONS2 = metrics['OPERATIONS-R2']
@@ -291,6 +310,9 @@ def generate_ouptput(metrics,archi):
 
     visualize_fdr([FDR1,FDR2],archi,'FDR')
     visualize_fdr([WFDR1,WFDR2],archi,'WFDR')
+
+    visualize_time(TIME_GET, 'average time for get_experiment()')
+    visualize_time(TIME_RESULT, 'average time for result()')
 
     table_counter([OPERATIONS1, OPERATIONS2], archi)
     # what to do:
@@ -319,7 +341,7 @@ def visualize_er(data,archi):
         plt.xlabel('faults_found')
         plt.ylabel('experiments_run') 
         plt.legend(loc='best')
-        path = './figures/' + patterns + '-' + str(i+1) + '-ER-line.png' 
+        path = './figures-noq/' + patterns + '-' + str(i+1) + '-ER-line.png' 
         plt.savefig(path)
         plt.close()
 
@@ -337,13 +359,13 @@ def visualize_fdr(data,archi,yaxis):
         plt.xlabel('experiments_run')
         plt.ylabel(yaxis) 
         plt.legend(loc='best')
-        path = './figures/' + patterns + '-' + str(i+1) + '-' + yaxis + '-line.png'
+        path = './figures-noq/' + patterns + '-' + str(i+1) + '-' + yaxis + '-line.png'
         plt.savefig(path)
         plt.close()
 
 
 
-        labels = data[i].keys()
+        labels = sorted(data[i].keys())
         data_all = []
         for algorithm in labels:
             max_key = max(data[i][algorithm].keys())
@@ -357,17 +379,38 @@ def visualize_fdr(data,archi,yaxis):
         ax.xaxis.set_ticks_position('none')
         ax.yaxis.set_ticks_position('none')
         ax.xaxis.set_ticklabels(labels)
+        plt.xticks(rotation=90)
+        plt.gcf().subplots_adjust(bottom=0.25)
+
 
 
         ax.yaxis.set_label_text(yaxis + ' for ' + str(max_key) + ' experiments')
         ax.set_title(yaxis + ' for ' + patterns + ', reward function ' + str(i+1))
         formatter = mtick.ScalarFormatter(useOffset=False)
         ax.yaxis.set_major_formatter(formatter)
-        path = './figures/' + patterns + '-' + str(i+1) + '-' + yaxis + '-box.png'
+        path = './figures-noq/' + patterns + '-' + str(i+1) + '-' + yaxis + '-box.png'
         plt.savefig(path)
         plt.close()
         
+def visualize_time(data,title):
+    xvals = sorted(data.keys())
+    yvals = [] 
+    for x in xvals:
+        yvals.append(data[x])
+    
+    plt.bar(xvals,yvals) 
+    plt.xticks(rotation=90)
+    plt.ylabel('ms')
+    plt.title(title)
+    plt.gcf().subplots_adjust(bottom=0.2)
 
+    if 'experiment' in title:
+        path = './figures-noq/times_get.png' 
+    else: 
+        path = './figures-noq/times_result.png'
+        
+    plt.savefig(path)
+    plt.close() 
 def table_counter(data, archi):
     patterns = archi.patterns 
 
@@ -393,7 +436,7 @@ def table_counter(data, archi):
         
         csv_columns = ['fault-injection'] + algorithms 
 
-        csv_file = './figures/' + patterns + '-' + str(i+1) + '-counter.csv'
+        csv_file = './figures-noq/' + patterns + '-' + str(i+1) + '-counter.csv'
         try:
             with open(csv_file, 'w') as csvfile:
                 writer = csv.writer(csvfile, delimiter = ' ')
