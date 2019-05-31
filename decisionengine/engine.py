@@ -71,27 +71,15 @@ def main():
         metrics['TIME_RESULT'] = {}
         metrics['INIT_TIME'] = {} 
 
-        #start_time = int(time.time() * 1000)
         algorithms.append(RandomAlgorithm(archi,[]))
-        #metrics['INIT_TIME']['random'] = int(time.time() * 1000) - start_time 
-        #start_time = int(time.time() * 1000)
         algorithms.append(BanditEpsilonAlgorithm(archi,[0.5,0.99,0.1]))
-        #metrics['INIT_TIME']['bandit-epsilon'] = int(time.time() * 1000) - start_time 
-        #start_time = int(time.time() * 1000)
         algorithms.append(BanditOptimisticAlgorithm(archi,[5]))
-        #metrics['INIT_TIME']['bandit-optimistic'] = int(time.time() * 1000) - start_time 
-        #start_time = int(time.time() * 1000)
-        #algorithms.append(QLearningAlgorithm(archi,[0.2, 0.99, 0.66, 5]))
-        #metrics['INIT_TIME']['qlearning'] = int(time.time() * 1000) - start_time
-        #start_time = int(time.time() * 1000)
+        algorithms.append(QLearningAlgorithm(archi,[0.2, 0.99, 0.66, 5]))
         algorithms.append(TableauAlgorithm(archi,[0.4, 0.99, 5, 0.1,5]))
-        #metrics['INIT_TIME']['tableau'] = int(time.time() * 1000) - start_time
-        #start_time = int(time.time() * 1000)
         algorithms.append(NeuralNetworkAlgorithm(archi,[12]))
-        #metrics['INIT_TIME']['neuralnetwork'] = int(time.time() * 1000) - start_time
-        algorithms.append(BayesianLowAlgorithm(archi,[]))
-        algorithms.append(BayesianHighAlgorithm(archi,[])) 
-        algorithms.append(MLFQAlgorithm(archi,[5,200]))
+        algorithms.append(BayesianLowAlgorithm(archi,[100]))
+        algorithms.append(BayesianHighAlgorithm(archi,[100])) 
+        algorithms.append(MLFQAlgorithm(archi,[4,200]))
         pool = ThreadPool(len(algorithms))
         pool.map(partial(run_experiment,archi,metrics,mocker), algorithms)
         pool.close()
@@ -102,8 +90,8 @@ def main():
 
 def run_experiment(arch,metrics,mocker,algorithm):
     runs = 50
-    faults_to_find = 500
-    experiments_to_run = 500 # 5000
+    faults_to_find = 150
+    experiments_to_run = 400
 
 
     total = (runs * (faults_to_find + experiments_to_run)) * 2
@@ -341,7 +329,7 @@ def visualize_er(data,archi):
         plt.xlabel('faults_found')
         plt.ylabel('experiments_run') 
         plt.legend(loc='best')
-        path = './figures-noq/' + patterns + '-' + str(i+1) + '-ER-line.png' 
+        path = './figures//' + patterns + '-' + str(i+1) + '-ER-line.png' 
         plt.savefig(path)
         plt.close()
 
@@ -359,7 +347,7 @@ def visualize_fdr(data,archi,yaxis):
         plt.xlabel('experiments_run')
         plt.ylabel(yaxis) 
         plt.legend(loc='best')
-        path = './figures-noq/' + patterns + '-' + str(i+1) + '-' + yaxis + '-line.png'
+        path = './figures//' + patterns + '-' + str(i+1) + '-' + yaxis + '-line.png'
         plt.savefig(path)
         plt.close()
 
@@ -388,7 +376,7 @@ def visualize_fdr(data,archi,yaxis):
         ax.set_title(yaxis + ' for ' + patterns + ', reward function ' + str(i+1))
         formatter = mtick.ScalarFormatter(useOffset=False)
         ax.yaxis.set_major_formatter(formatter)
-        path = './figures-noq/' + patterns + '-' + str(i+1) + '-' + yaxis + '-box.png'
+        path = './figures//' + patterns + '-' + str(i+1) + '-' + yaxis + '-box.png'
         plt.savefig(path)
         plt.close()
         
@@ -405,9 +393,9 @@ def visualize_time(data,title):
     plt.gcf().subplots_adjust(bottom=0.2)
 
     if 'experiment' in title:
-        path = './figures-noq/times_get.png' 
+        path = './figures//times_get.png' 
     else: 
-        path = './figures-noq/times_result.png'
+        path = './figures//times_result.png'
         
     plt.savefig(path)
     plt.close() 
@@ -436,17 +424,17 @@ def table_counter(data, archi):
         
         csv_columns = ['fault-injection'] + algorithms 
 
-        csv_file = './figures-noq/' + patterns + '-' + str(i+1) + '-counter.csv'
+        csv_file = './figures//' + patterns + '-' + str(i+1) + '-counter.csv'
         try:
             with open(csv_file, 'w') as csvfile:
-                writer = csv.writer(csvfile, delimiter = ' ')
+                writer = csv.writer(csvfile, delimiter = ',')
                 writer.writerow(csv_columns) 
 
                 fault_injections = sorted(result.keys())
                 for fault_injection in fault_injections:
                     row = [fault_injection]
                     for value in result[fault_injection]:
-                        row.append(str(value))
+                        row.append(str(round(value,2)))
                     writer.writerow(row)
         except IOError:
             print("I/O error")

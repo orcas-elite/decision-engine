@@ -3,6 +3,7 @@ import operator
 import numpy as np 
 from sklearn import neural_network
 from queue import *
+import time
 
 class BaseAlgorithm(object):
     def __init__(self, arch,params):
@@ -34,11 +35,12 @@ class BayesianLowAlgorithm(BaseAlgorithm):
         self.fault_injections = []
         self.train_mode = True 
         self.iterations = 0
-        self.training_limit = 100
+        self.training_limit = params[0]
 
         operations = self.arch.get_operations()
         faults = ['abort','delay']
         for op in operations:
+            # omit fault injections into integration points
             if op.name not in ['a1','a2']:
                 for fault in faults:
                     self.fault_injections.append(op.name + '-' + fault)
@@ -77,7 +79,7 @@ class BayesianHighAlgorithm(BaseAlgorithm):
         self.probs = []
         self.train_mode = True 
         self.iterations = 0
-        self.training_limit = 100
+        self.training_limit = params[0]
 
         seen = []
         operations = self.arch.get_operations() 
@@ -150,7 +152,7 @@ class BanditEpsilonAlgorithm(BaseAlgorithm):
         self.N = {}
         for action in self.fault_injections:
             self.Q[action] = 0
-            self.N[action] = 1
+            self.N[action] = 0
     def get_experiment(self):
         if random.random() < self.epsilon:
             action = random.choice(list(self.Q.keys())) 
@@ -180,6 +182,7 @@ class BanditOptimisticAlgorithm(BaseAlgorithm):
         self.N = {}
         for action in self.fault_injections:
             self.Q[action] = self.optimistic
+            # init N at 1 to prevent the first result of 0 to entirely reduce the Q value to 0 
             self.N[action] = 1
     def get_experiment(self):
         # TODO: GEt all the max actions, selection randomly from all 
@@ -206,13 +209,14 @@ class QLearningAlgorithm(BaseAlgorithm):
         self.learning_rate = params[2]
         self.initial_q = params[3]
 
+        self.new_episode = True
         self.name = 'qlearning'
 
         self.states = {}
         for operation in arch.get_operations():
-            inc_deps = self.arch.get_incoming_dependencies(operation)
-            if len(inc_deps) == 0:
+            if operation.name in ['a1','a2']:
                 continue
+            inc_deps = self.arch.get_incoming_dependencies(operation)
             self.states[operation.name] = {
                 'Q': {},
                 'N': {}
@@ -221,29 +225,46 @@ class QLearningAlgorithm(BaseAlgorithm):
             for dep in inc_deps:
                 self.states[operation.name]['Q'][dep.name] = self.initial_q
                 self.states[operation.name]['N'][dep.name] = 0
-
         self.state = random.choice(list(self.states.keys()))
+        while len(list(self.states[self.state]['Q'].keys())) == 0:
+            self.state = random.choice(list(self.states.keys()))
     def get_experiment(self):
-        if np.random.rand() >= self.epsilon:
-            action = self.random_argmax(self.states[self.state]['Q'])
-        else:
-            action = random.choice(list(self.states[self.state]['Q'].keys()))
-        self.next_state = action
-
         fault_types = ['abort','delay']
         fault_type = random.choice(fault_types)
-        action = action + '-' + fault_type
+        if self.new_episode == True:
+            self.next_state = self.state
+            return self.state + '-' + fault_type 
+        if np.random.rand() >= self.epsilon:
+            self.next_state = self.random_argmax(self.states[self.state]['Q'])
+        else:
+            self.next_state = random.choice(list(self.states[self.state]['Q'].keys()))
+        fault_types = ['abort','delay']
+        fault_type = random.choice(fault_types)
+        action = self.next_state + '-' + fault_type
         return action
 
     def result(self,result):
-        if self.next_state not in self.states.keys():
+        if self.new_episode == True:
+            self.new_episode = False 
+            if len(list(self.states[self.state]['Q'].keys())) == 0:
+                self.state = random.choice(list(self.states.keys())) 
+                self.new_episode = True 
+            return 
+        next_state_actual = self.next_state
+        if len(list(self.states[next_state_actual]['Q'].keys())) == 0:
             next_state_actual = random.choice(list(self.states.keys()))
-        else:
-            next_state_actual = self.next_state
+            self.new_episode = True
 
         prev_q = self.states[self.state]['Q'][self.next_state]
+        
+        next_est = None 
+        if len(list(self.states[next_state_actual]['Q'].keys())) == 0:
+            next_est = 0 
+        else:
+            next_est = self.states[next_state_actual]['Q'][self.random_argmax(self.states[next_state_actual]['Q'])] 
+
         self.states[self.state]['N'][self.next_state] += 1
-        self.states[self.state]['Q'][self.next_state] = (1-self.learning_rate)*prev_q+self.learning_rate*(result+self.gamma*self.states[next_state_actual]['Q'][self.random_argmax(self.states[next_state_actual]['Q'])])
+        self.states[self.state]['Q'][self.next_state] = (1-self.learning_rate)*prev_q+self.learning_rate*(result+self.gamma*next_est)
         self.state = next_state_actual
 
     def reset(self):
@@ -497,7 +518,6 @@ class MLFQAlgorithm(BaseAlgorithm):
         else:
             if not self.last_index == self.queue_count - 1:
                 self.last_index += 1
-        
         self.queues[self.last_index].put(self.last_action)
 
         self.iterations += 1
@@ -507,8 +527,10 @@ class MLFQAlgorithm(BaseAlgorithm):
     
     def init_queues(self):
         self.iterations = 0
-        self.queues = [Queue()] * self.queue_count
         operations = self.arch.get_operations() 
+        self.queues = []
+        for i in range(self.queue_count):
+            self.queues.append(Queue(2*len(operations)))
         faults = ['abort','delay']
         for op in operations:
             if op.name not in ['a1','a2']:

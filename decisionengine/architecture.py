@@ -42,8 +42,8 @@ class Architecture:
                 for dep in op.dependencies:
                     if dep.operation.name == operation.name and op.name not in ['a1','a2']:
                         operations.add(op)
-
         return list(operations)
+        
     def to_string(self):
         results = self.patterns + "\n"
         results = results + "Services \n"
