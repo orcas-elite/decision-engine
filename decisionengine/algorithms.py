@@ -30,6 +30,8 @@ class BayesianLowAlgorithm(BaseAlgorithm):
     def __init__(self,arch,params):
         super(BayesianLowAlgorithm, self).__init__(arch,params)
         self.name = 'bayes-low'
+        self.total_revealed = 0
+        self.total_injected = 0
         self.counters = []
         self.probs = []
         self.fault_injections = []
@@ -60,11 +62,14 @@ class BayesianLowAlgorithm(BaseAlgorithm):
     def result(self,result):
         if result > 0:
             self.counters[self.last_index][0] += 1
+            self.total_revealed += 1
         self.counters[self.last_index][1] += 1
+        self.total_injected += 1
 
         if not self.train_mode:
             if self.counters[self.last_index][0] > 0:
-                self.probs[self.last_index] = self.counters[self.last_index][0] / self.counters[self.last_index][1]
+                for i in range(len(self.probs)):
+                    self.probs[i] = ((self.counters[i][0] / self.counters[i][1]) * (self.total_revealed / self.total_injected)) / ((self.counters[i][0] / self.counters[i][1]) * (self.total_revealed / self.total_injected) + (((self.counters[i][1] - self.counters[i][0])/self.counters[i][1]) * ((self.total_injected - self.total_revealed) / self.total_injected)))
                 sum_probs = sum(self.probs)
                 for i in range(len(self.probs)):
                     self.probs[i] = self.probs[i] / sum_probs
@@ -75,6 +80,8 @@ class BayesianHighAlgorithm(BaseAlgorithm):
         self.feature_list = []
         feature_init = []
         self.fault_injections = {}
+        self.total_injected = 0 
+        self.total_revealed = 0
         self.counters = []
         self.probs = []
         self.train_mode = True 
@@ -116,11 +123,14 @@ class BayesianHighAlgorithm(BaseAlgorithm):
     def result(self,result):
         if result > 0:
             self.counters[self.last_index][0] += 1
-        self.counters[self.last_index][1] += 1
+            self.total_revealed += 1
 
+        self.counters[self.last_index][1] += 1
+        self.total_injected += 1
         if not self.train_mode:
             if self.counters[self.last_index][0] > 0:
-                self.probs[self.last_index] = self.counters[self.last_index][0] / self.counters[self.last_index][1]
+                for i in range(len(self.probs)):
+                    self.probs[i] = ((self.counters[i][0] / self.counters[i][1]) * (self.total_revealed / self.total_injected)) / ((self.counters[i][0] / self.counters[i][1]) * (self.total_revealed / self.total_injected) + (((self.counters[i][1] - self.counters[i][0])/self.counters[i][1]) * ((self.total_injected - self.total_revealed) / self.total_injected)))
                 sum_probs = sum(self.probs)
                 for i in range(len(self.probs)):
                     self.probs[i] = self.probs[i] / sum_probs
@@ -131,11 +141,9 @@ class BayesianHighAlgorithm(BaseAlgorithm):
             features.append(0)
         else:
             features.append(1) 
-        if op.circuitbreaker == None:
-            features.append(0)
-        else:
-            features.append(1)
-        features.append(len(op.dependencies)) 
+        features.append(len(op.circuitbreaker))
+        deps = self.arch.get_incoming_dependencies(op)
+        features.append(len(deps)) 
 
         return features
 
@@ -250,21 +258,23 @@ class QLearningAlgorithm(BaseAlgorithm):
                 self.state = random.choice(list(self.states.keys())) 
                 self.new_episode = True 
             return 
+
+        prev_q = self.states[self.state]['Q'][self.next_state]
+        
+        next_est = None 
+        if len(list(self.states[self.next_state]['Q'].keys())) == 0:
+            next_est = 0 
+        else:
+            next_est = self.states[self.next_state]['Q'][self.random_argmax(self.states[self.next_state]['Q'])] 
+
+        self.states[self.state]['N'][self.next_state] += 1
+        self.states[self.state]['Q'][self.next_state] = (1-self.learning_rate)*prev_q+self.learning_rate*(result+self.gamma*next_est-prev_q)
+
         next_state_actual = self.next_state
         if len(list(self.states[next_state_actual]['Q'].keys())) == 0:
             next_state_actual = random.choice(list(self.states.keys()))
             self.new_episode = True
 
-        prev_q = self.states[self.state]['Q'][self.next_state]
-        
-        next_est = None 
-        if len(list(self.states[next_state_actual]['Q'].keys())) == 0:
-            next_est = 0 
-        else:
-            next_est = self.states[next_state_actual]['Q'][self.random_argmax(self.states[next_state_actual]['Q'])] 
-
-        self.states[self.state]['N'][self.next_state] += 1
-        self.states[self.state]['Q'][self.next_state] = (1-self.learning_rate)*prev_q+self.learning_rate*(result+self.gamma*next_est)
         self.state = next_state_actual
 
     def reset(self):
@@ -349,13 +359,10 @@ class TableauAlgorithm(BaseAlgorithm):
 
     def extract_features(self,operation,fault):
         features = []
-
-        if operation.circuitbreaker != None:
-            features.append(1)
-        else:
-            features.append(0)
+        features.append(len(operation.circuitbreaker))
         
-        features.append(len(operation.dependencies))
+        deps = self.arch.get_incoming_dependencies(operation)
+        features.append(len(deps))
 
         if fault == 'abort':
             features.append(0)
@@ -453,12 +460,10 @@ class NeuralNetworkAlgorithm(BaseAlgorithm):
     def extract_features(self,operation,fault):
         features = []
 
-        if operation.circuitbreaker != None:
-            features.append(1)
-        else:
-            features.append(0)
+        features.append(len(operation.circuitbreaker))
         
-        features.append(len(operation.dependencies))
+        deps = self.arch.get_incoming_dependencies(operation)
+        features.append(len(deps))
         features.append(operation.service.instances)
         history = []
         for i in range(4):

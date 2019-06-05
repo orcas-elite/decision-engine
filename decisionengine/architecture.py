@@ -19,14 +19,16 @@ class Architecture:
                     
                     ops = []
                     ops.append(self.services[i].operations[j])
-                    seen = [self.services[i].operations[j]]
+                    seen = set() 
+                    seen.add(self.services[i].operations[j])
 
                     while len(ops) > 0:
                         operation = ops.pop()
                         for dep in operation.dependencies:
-                            ops.append(dep.operation)
-                            seen.append(dep.operation)
-                            dep.operation.circuitbreaker = cb 
+                            if dep.operation not in seen: 
+                                ops.append(dep.operation)
+                                seen.add(dep.operation)
+                            dep.operation.circuitbreaker.append(cb) 
 
     def get_operations(self):
         operations = []
@@ -81,7 +83,7 @@ class Operation:
         self.service = ms
         self.name = operation['name']
         self.demand = operation['demand']
-        self.circuitbreaker = None # CircuitBreaker(operation['circuitBreaker'])
+        self.circuitbreaker = []
         self.dependencies = []
         for dp in operation['dependencies']:
             self.dependencies.append(Dependency(dp))
