@@ -206,8 +206,7 @@ class BanditOptimisticAlgorithm(BaseAlgorithm):
         self.N = {}
         for action in self.fault_injections:
             self.Q[action] = self.optimistic
-            # init N at 1 to prevent the first result of 0 to entirely reduce the Q value to 0 
-            self.N[action] = 1
+            self.N[action] = 0
     def get_experiment(self):
         # TODO: Get all the max actions, selection randomly from all. Currently choose first item. 
         action = max(self.Q.items(), key=operator.itemgetter(1))[0]
@@ -218,7 +217,7 @@ class BanditOptimisticAlgorithm(BaseAlgorithm):
         action = self.last_action
         prev_q = self.Q[action]
         self.N[action] += 1
-        self.Q[action] = prev_q + (1/self.N[action]) * (result - prev_q)
+        self.Q[action] = prev_q + (1/(self.N[action]+1) * (result - prev_q)
 
 
     def reset(self):
@@ -326,24 +325,24 @@ class TableauAlgorithm(BaseAlgorithm):
                     self.states[str(features)] = {
                         'Q': [self.initial_q] * self.action_size,
                         # initialize N at 1 to prevent the first result setting Q to 0 
-                        'N': [1] * self.action_size
+                        'N': [0] * self.action_size
                     }
                     self.fault_injections[operation.name + '-' + fault] = str(features)
                     
     def get_experiment(self):
-        queues = []
+        lists = []
         for i in range(self.action_size):
-            queues.append([])
+            lists.append([])
         for s in self.states:
             if np.random.rand() >= self.epsilon:
                 action = self.random_argmax(self.states[s]['Q'])
             else: 
                 action = np.random.randint(self.action_size)
-            queues[action].append(s)
+            lists[action].append(s)
         
         for i in range(self.action_size):
-            if len(queues[i]) != 0:
-                self.last_state = random.choice(queues[i])
+            if len(lists[i]) != 0:
+                self.last_state = random.choice(lists[i])
                 self.last_action = i
 
                 matching_injections = []
@@ -358,7 +357,7 @@ class TableauAlgorithm(BaseAlgorithm):
         self.states[self.last_state]['N'][self.last_action] += 1
         n = self.states[self.last_state]['N'][self.last_action]
         prev_q = self.states[self.last_state]['Q'][self.last_action]
-        self.states[self.last_state]['Q'][self.last_action] = prev_q + 1.0 / n * (result - prev_q)
+        self.states[self.last_state]['Q'][self.last_action] = prev_q + 1.0 / (n+1) * (result - prev_q)
 
         self.epsilon = (self.epsilon - self.min_epsilon) * self.gamma + self.min_epsilon
 
