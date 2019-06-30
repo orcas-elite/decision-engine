@@ -1,6 +1,7 @@
 import json
 class Architecture:
     def __init__(self, archJson, patterns):
+        # initialize the architectures
         with open(archJson, "r") as f:
             arch = json.load(f)
             self.services = []
@@ -12,6 +13,9 @@ class Architecture:
 
         self.patterns = patterns 
 
+        # set circuit breakers, based on patterns parameter
+        # TODO: Use architectural model, instead of patterns parameter
+        # TODO: Clarify how to use circuit breakers, if dependency does not have 100% demand
         for i in range(len(self.services)):
             for j in range(len(self.services[i].operations)):
                 if self.services[i].operations[j].name + 'true' in patterns:
@@ -21,7 +25,15 @@ class Architecture:
                     ops.append(self.services[i].operations[j])
                     seen = set() 
                     seen.add(self.services[i].operations[j])
-
+                    
+                    # each operation has list of circuit breakers
+                    # this list contains all circuit breakers of operations that (indirectly) use this operation
+                    # example: a1 has circuit breaker cb, a1 depends on b1 and c1, b1 depends on d1
+                    # a1.circuitbreaker = [] 
+                    # b1.circuitbreaker = [cb]
+                    # c1.circuitbreaker = [cb]
+                    # d1.circuitbreaker = [cb]
+                    # TODO: For use in live system, this has to be changed. Currently this assumes that all dependencies are used all the time. 
                     while len(ops) > 0:
                         operation = ops.pop()
                         for dep in operation.dependencies:
@@ -31,6 +43,9 @@ class Architecture:
                             dep.operation.circuitbreaker.append(cb) 
 
     def get_operations(self):
+        """
+        Returns all operations.
+        """
         operations = []
         for service in self.services:
             for operation in service.operations: 
@@ -38,6 +53,10 @@ class Architecture:
         return operations
     
     def get_incoming_dependencies(self,operation):
+        """
+        Returns all incoming dependencies for a service, except a1,a2
+        """
+        # TODO: Remove the a1,a2 bit for use in live system. Add parameter for exclusion?
         operations = set()
         for service in self.services:
             for op in service.operations:

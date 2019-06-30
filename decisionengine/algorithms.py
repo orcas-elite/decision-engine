@@ -4,8 +4,12 @@ import numpy as np
 from sklearn import neural_network
 from queue import *
 import time
+import abc
 
 class BaseAlgorithm(object):
+    __metaclass__ = abc.ABCMeta 
+
+    @abc.abstractmethod
     def __init__(self, arch,params):
         self.params = params
         self.arch = arch
@@ -13,16 +17,21 @@ class BaseAlgorithm(object):
         self.fault_injections = []
         operations = self.arch.get_operations()
         for operation in operations:
+            # omit integration points a1,a2. 
+            # TODO: Remove this for live system
             if operation.name in ['a1','a2']:
                 continue
             for fault in fault_types: 
                 self.fault_injections.append(operation.name + '-' + fault) 
 
+    @abc.abstractmethod
     def get_experiment(self):
         return 0
 
-    def result(self, result):
+    @abc.abstractmethod
+    def enter_result(self, result):
         pass
+    @abc.abstractmethod
     def reset(self):
         self.__init__(self.arch,self.params)
 
@@ -59,7 +68,7 @@ class BayesianLowAlgorithm(BaseAlgorithm):
             self.train_mode = False
         return self.last_injection
 
-    def result(self,result):
+    def enter_result(self,result):
         if result > 0:
             self.counters[self.last_index][0] += 1
             self.total_revealed += 1
@@ -69,10 +78,14 @@ class BayesianLowAlgorithm(BaseAlgorithm):
         if not self.train_mode:
             if self.counters[self.last_index][0] > 0:
                 for i in range(len(self.probs)):
-                    self.probs[i] = ((self.counters[i][0] / self.counters[i][1]) * (self.total_revealed / self.total_injected)) / ((self.counters[i][0] / self.counters[i][1]) * (self.total_revealed / self.total_injected) + (((self.counters[i][1] - self.counters[i][0])/self.counters[i][1]) * ((self.total_injected - self.total_revealed) / self.total_injected)))
+                    if self.counters[i][0] != 0:
+                        self.probs[i] = ((self.counters[i][0] / self.counters[i][1]) * (self.total_revealed / self.total_injected)) / ((self.counters[i][0] / self.counters[i][1]) * (self.total_revealed / self.total_injected) + (((self.counters[i][1] - self.counters[i][0])/self.counters[i][1]) * ((self.total_injected - self.total_revealed) / self.total_injected)))
                 sum_probs = sum(self.probs)
                 for i in range(len(self.probs)):
                     self.probs[i] = self.probs[i] / sum_probs
+    
+    def reset(self):
+        super(BayesianLowAlgorithm, self).reset()
 class BayesianHighAlgorithm(BaseAlgorithm):
     def __init__(self,arch,params):
         super(BayesianHighAlgorithm, self).__init__(arch,params) 
@@ -92,6 +105,7 @@ class BayesianHighAlgorithm(BaseAlgorithm):
         operations = self.arch.get_operations() 
         faults = ['abort','delay']
         for op in operations:
+            # omit injections into integration points
             if op.name not in ['a1','a2']:
                 for fault in faults:
                     features = self.extract_features(op,fault)
@@ -120,7 +134,7 @@ class BayesianHighAlgorithm(BaseAlgorithm):
             self.train_mode = False
         return self.last_injection
 
-    def result(self,result):
+    def enter_result(self,result):
         if result > 0:
             self.counters[self.last_index][0] += 1
             self.total_revealed += 1
@@ -134,7 +148,9 @@ class BayesianHighAlgorithm(BaseAlgorithm):
                 sum_probs = sum(self.probs)
                 for i in range(len(self.probs)):
                     self.probs[i] = self.probs[i] / sum_probs
-
+    def reset(self):
+        super(BayesianHighAlgorithm, self).reset()
+        
     def extract_features(self,op,fault):
         features = [] 
         if fault == 'abort':
@@ -170,7 +186,7 @@ class BanditEpsilonAlgorithm(BaseAlgorithm):
             self.last_action = action
         return action
 
-    def result(self,result):
+    def enter_result(self,result):
         action = self.last_action
         self.N[action] += 1
         prev_q = self.Q[action] 
@@ -193,12 +209,12 @@ class BanditOptimisticAlgorithm(BaseAlgorithm):
             # init N at 1 to prevent the first result of 0 to entirely reduce the Q value to 0 
             self.N[action] = 1
     def get_experiment(self):
-        # TODO: GEt all the max actions, selection randomly from all 
+        # TODO: Get all the max actions, selection randomly from all. Currently choose first item. 
         action = max(self.Q.items(), key=operator.itemgetter(1))[0]
         self.last_action = action
         return action
 
-    def result(self,result):
+    def enter_result(self,result):
         action = self.last_action
         prev_q = self.Q[action]
         self.N[action] += 1
@@ -251,7 +267,7 @@ class QLearningAlgorithm(BaseAlgorithm):
         action = self.next_state + '-' + fault_type
         return action
 
-    def result(self,result):
+    def enter_result(self,result):
         if self.new_episode == True:
             self.new_episode = False 
             if len(list(self.states[self.state]['Q'].keys())) == 0:
@@ -303,6 +319,7 @@ class TableauAlgorithm(BaseAlgorithm):
         operations = self.arch.get_operations()
         faults = ['abort','delay']
         for operation in operations:
+            # omit injections into integration points
             if operation.name not in ['a1','a2']:
                 for fault in faults:
                     features = self.extract_features(operation,fault)
@@ -336,15 +353,13 @@ class TableauAlgorithm(BaseAlgorithm):
                 fault_injection = random.choice(matching_injections)
                 return fault_injection
 
-    def result(self, result):
+    def enter_result(self, result):
         # Update Q
         self.states[self.last_state]['N'][self.last_action] += 1
         n = self.states[self.last_state]['N'][self.last_action]
         prev_q = self.states[self.last_state]['Q'][self.last_action]
         self.states[self.last_state]['Q'][self.last_action] = prev_q + 1.0 / n * (result - prev_q)
-        # self.states[state]['Q'][act_idx] = prev_q + self.learning_rate * (reward - prev_q)
-        #self.states[state]['Q'][act_idx] = (1-self.learning_rate)*prev_q+self.learning_rate*(reward+self.gamma*)
-            
+
         self.epsilon = (self.epsilon - self.min_epsilon) * self.gamma + self.min_epsilon
 
     def reset(self):
@@ -391,6 +406,7 @@ class NeuralNetworkAlgorithm(BaseAlgorithm):
         faults = ['abort','delay']
 
         for operation in operations: 
+            # omit injections into integration points
             if operation.name not in ['a1','a2']:
                 for fault in faults: 
                     self.states[str(operation.name + '-' + fault)] = self.extract_features(operation, fault)
@@ -420,7 +436,7 @@ class NeuralNetworkAlgorithm(BaseAlgorithm):
         self.last_state = random.choices(keys, weights = weights, k = 1)[0]
         return self.last_state
 
-    def result(self, result):
+    def enter_result(self, result):
         if not self.train_mode:
             return
 
@@ -516,7 +532,7 @@ class MLFQAlgorithm(BaseAlgorithm):
                 self.last_index = q
                 return self.last_action
 
-    def result(self,result):
+    def enter_result(self,result):
         if result > 0:
             if self.last_index > 0:
                 self.last_index -= 1 
@@ -538,6 +554,7 @@ class MLFQAlgorithm(BaseAlgorithm):
             self.queues.append(Queue(2*len(operations)))
         faults = ['abort','delay']
         for op in operations:
+            # omit injections into integration points
             if op.name not in ['a1','a2']:
                 for fault in faults:
                     self.queues[0].put(op.name + '-' + fault)
@@ -552,6 +569,9 @@ class MLFQAlgorithm(BaseAlgorithm):
         probs_sum = sum(self.probs)
         for i in range(len(self.probs)):
             self.probs[i] = self.probs[i] / probs_sum
+
+    def reset(self):
+        super(MLFQAlgorithm, self).reset()
 class RandomAlgorithm(BaseAlgorithm):
     def __init__(self, arch,params):
         super(RandomAlgorithm, self).__init__(arch,params)
@@ -559,3 +579,7 @@ class RandomAlgorithm(BaseAlgorithm):
 
     def get_experiment(self):
         return random.choice(self.fault_injections)
+    def enter_result(self,result):
+        pass
+    def reset(self):
+        super(RandomAlgorithm, self).reset()

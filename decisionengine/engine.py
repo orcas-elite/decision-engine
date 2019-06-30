@@ -12,15 +12,28 @@ import csv
 
 # define architectures
 def init_architectures():
+    """
+    Initialize the architectures with the circuit breaker patterns. 
+    """
+    # TODO: Remove the patterns bit and use circuit breakers as specified in architectural_model.json
     patterns = ['a1false-a2false-b1true-c1false', 'a1false-a2false-b1false-c1true','a1false-a2false-b1true-c1true','a1true-a2false-b1false-c1false','a1false-a2true-b1false-c1false']#['a1false-a2false-b1false-c1false','a1true-a2false-b1false-c1false','a1false-a2true-b1false-c1false', 'a1true-a2true-b1false-c1false']
 
     architectures = []
     for pattern in patterns:
         architectures.append(Architecture('architecture_model.json', pattern))
     return architectures 
-# define mocking
+
 class FaultInjector(object):
+    """
+    Fault injector that returns mocked results
+    """
     def __init__(self,architectures):
+        """
+        Initialize mocker, retrieve data for provided architectures.
+        Takes sample with size n=5000 for each fault injection. 
+        """
+        # TODO: Pass data directory and integration points as parameters. 
+
         self.cached_results = {}
         self.date = 'experiment-2018-11-04T08-32-02UTC'
 
@@ -39,6 +52,9 @@ class FaultInjector(object):
                             results_2 = pd.read_csv(path).sample(n=5000)
                             self.cached_results[patterns][faultinj] = {'a1': results_1, 'a2': results_2}
     def inject_fault(self,architecture,faultinjection):
+        """
+        Retrieve mocked results of a fault injection. Return sample with n=1.  
+        """
         patterns = architecture.patterns
         faults = 0
         for ip in ['a1','a2']:
@@ -54,10 +70,11 @@ class FaultInjector(object):
 def main():
     architectures = init_architectures()
     mocker = FaultInjector(architectures)
+    # archMetrics is dictionary that tracks metrics for each architectures
     archMetrics = {}
-    for archi in architectures:
-        algorithms = []
 
+    # perform experiments on all architectures
+    for archi in architectures:
         metrics = {}
         metrics['ER-R1'] = {} 
         metrics['ER-R2'] = {}
@@ -71,6 +88,7 @@ def main():
         metrics['TIME_RESULT'] = {}
         metrics['INIT_TIME'] = {} 
 
+        algorithms = []
         algorithms.append(RandomAlgorithm(archi,[]))
         algorithms.append(BanditEpsilonAlgorithm(archi,[0.5,0.99,0.1]))
         algorithms.append(BanditOptimisticAlgorithm(archi,[5]))
@@ -80,6 +98,8 @@ def main():
         algorithms.append(BayesianLowAlgorithm(archi,[100]))
         algorithms.append(BayesianHighAlgorithm(archi,[100])) 
         algorithms.append(MLFQAlgorithm(archi,[4,200]))
+
+        # run algorithms in thread pool 
         pool = ThreadPool(len(algorithms))
         pool.map(partial(run_experiment,archi,metrics,mocker), algorithms)
         pool.close()
@@ -89,14 +109,19 @@ def main():
         generate_ouptput(metrics,archi)
 
 def run_experiment(arch,metrics,mocker,algorithm):
-    print(arch.pattern)
+    """
+    Run the experiment for an algorithm and an architecture. 
+    """
+    # how many times to perform the experiment
     runs = 20
+    # how many faults to find for ER metric
     faults_to_find = 150
+    # how many experiments to run for FDR / counter / times metrics
     experiments_to_run = 400
-
 
     total = (runs * (faults_to_find + experiments_to_run))
     done = 0
+
 
     injection_results_R1 = []
     injection_selections_R1 = []
@@ -104,6 +129,7 @@ def run_experiment(arch,metrics,mocker,algorithm):
     #injection_selections_R2 = []
     injection_times_get = []
     injection_times_result = []
+
     for run in range(runs):
         injection_results_R1.append({'ER': [], 'WFDR': []})
         #injection_results_R2.append({'ER': [], 'WFDR': []})
@@ -125,11 +151,12 @@ def run_experiment(arch,metrics,mocker,algorithm):
             if result > 0:
                 i += 1
                 done += 1
-                algorithm.result(1)
+                algorithm.enter_result(1)
             else:
-                algorithm.result(0)
+                algorithm.enter_result(0)
             if done % 1000 == 0:
                 print("Progress (" + algorithm.name + "):" + str(round((done / total) * 100,2)) + "%")
+        # reset the algorithm for next metric
         algorithm.reset() 
 
         #i = 0
@@ -144,7 +171,7 @@ def run_experiment(arch,metrics,mocker,algorithm):
         #    if result > 0:
         #        done += 1
         #        i += 1
-        #    algorithm.result(result)
+        #    algorithm.enter_result(result)
         #    if done % 100 == 0:
         #        print("Progress (" + algorithm.name + "):" + str(round((done / total) * 100,2)) + "%")
         #algorithm.reset() 
@@ -161,9 +188,9 @@ def run_experiment(arch,metrics,mocker,algorithm):
             injection_results_R1[run]['WFDR'].append(result)
             start_time = int(time.time() * 1000)
             if result > 0:
-                algorithm.result(1)
+                algorithm.enter_result(1)
             else:
-                algorithm.result(0)
+                algorithm.enter_result(0)
             injection_times_result[run].append(int(time.time() * 1000) - start_time)
             done += 1
             if done % 1000 == 0:
@@ -178,7 +205,7 @@ def run_experiment(arch,metrics,mocker,algorithm):
         #        injection_selections_R2[run]['WFDR'][fault_injection] = 0 
         #    result = mocker.inject_fault(arch,fault_injection)
         #    injection_results_R2[run]['WFDR'].append(result)
-        #    algorithm.result(result)
+        #    algorithm.enter_result(result)
         #    done += 1
         #    if done % 100 == 0:
         #        print("Progress (" + algorithm.name + "):" + str(round((done / total) * 100,2)) + "%")
@@ -196,7 +223,10 @@ def run_experiment(arch,metrics,mocker,algorithm):
     metrics['TIME_RESULT'][algorithm.name] = compute_time(injection_times_result)
 
 def compute_ER(data,limit):
-    thresholds = [] # [50,200,500,1000,2000]
+    """
+    Computes the ER data from the raw data of all runs.
+    """
+    thresholds = [] 
     threshold = 10 
     while threshold <= limit: 
         thresholds.append(threshold)
@@ -222,6 +252,9 @@ def compute_ER(data,limit):
     return result 
 
 def compute_FDR(data,total):
+    """
+    Compute the FDR data from the raw data of all runs.
+    """
     threshold = 10
     thresholds = []
     while threshold <= total:
@@ -246,6 +279,9 @@ def compute_FDR(data,total):
     return result 
 
 def compute_WFDR(data,total):
+    """
+    Compute the WFDR data from the raw data of all runs.
+    """
     threshold = 10
     thresholds = []
     while threshold <= total:
@@ -267,6 +303,9 @@ def compute_WFDR(data,total):
     return result 
 
 def compute_time(data):
+    """
+    Compute the time data from the raw data of all runs.
+    """
     total_sum = 0
     total_len = 0
     
@@ -277,12 +316,18 @@ def compute_time(data):
     return total_sum / total_len
 
 def compute_operations_counter(data):
+    """
+    Compute the counters data from the raw data of all runs.
+    """
     result = []
     for run in range(len(data)):
         result.append(data[run]['WFDR'])
     return result
 
 def generate_ouptput(metrics,archi):
+    """
+    Generate visualizations and tables for the metrics.
+    """
     ER1 = metrics['ER-R1']
     #ER2 = metrics['ER-R2']
     FDR1 = metrics['FDR-R1']
@@ -301,18 +346,15 @@ def generate_ouptput(metrics,archi):
     visualize_fdr([WFDR1],archi,'WFDR')
 
     visualize_time(TIME_GET, 'average time for get_experiment()')
-    visualize_time(TIME_RESULT, 'average time for result()')
+    visualize_time(TIME_RESULT, 'average time for enter_result)')
 
     table_counter([OPERATIONS1], archi)
-    # what to do:
-    # Visualize ER1 and ER2 for all data points, use boxplots 
-    # Visualize FDR and WFDR with box plots 
-    # Visualize FDR with a line plot, faults found / experiments run 
-    # Visualize TIME as box plots, adjust to per experiment by dividing through total 
-    # Visualize INIT_TIME as box plots
 
 
 def visualize_er(data,archi):
+    """
+    Visualize the ER metric in line plots, for both the rate and the total.
+    """
     patterns = archi.patterns 
 
 
@@ -326,32 +368,33 @@ def visualize_er(data,archi):
             plt.plot(xvals,yvals,label = algorithm)
         
         plt.title('ER for ' + patterns + ', reward function ' + str(i+1))
-        plt.xlabel('faults_found')
-        plt.ylabel('experiments_run') 
+        plt.xlabel('faults found')
+        plt.ylabel('experiments run') 
         plt.legend(loc='best')
-        path = './figures/' + patterns + '-' + str(i+1) + '-ER-line-total.png' 
+        path = './figures/' + patterns + '-' + str(i+1) + '-ER-line-total.pdf' 
         plt.savefig(path)
         plt.close()
     
-        for i in range(len(data)):
-
-            for algorithm in data[i].keys():
-                xvals = sorted(data[i][algorithm].keys()) 
-                yvals = [] 
-                for key in xvals:
-                    yvals.append(data[i][algorithm][key]/key) 
-
-                plt.plot(xvals,yvals,label = algorithm)
-
-            plt.title('ER for ' + patterns + ', reward function ' + str(i+1))
-            plt.xlabel('faults_found')
-            plt.ylabel('ER') 
-            plt.legend(loc='best')
-            path = './figures/' + patterns + '-' + str(i+1) + '-ER-line-rate.png' 
-            plt.savefig(path)
-            plt.close()
+    for i in range(len(data)):
+        for algorithm in data[i].keys():
+            xvals = sorted(data[i][algorithm].keys()) 
+            yvals = [] 
+            for key in xvals:
+                yvals.append(data[i][algorithm][key]/key) 
+            plt.plot(xvals,yvals,label = algorithm)
+            
+        plt.title('ER for ' + patterns + ', reward function ' + str(i+1))
+        plt.xlabel('faults found')
+        plt.ylabel('ER') 
+        plt.legend(loc='best')
+        path = './figures/' + patterns + '-' + str(i+1) + '-ER-line-rate.pdf' 
+        plt.savefig(path)
+        plt.close()
 
 def visualize_fdr(data,archi,yaxis):
+    """
+    Visualize the FDR metric as line and box plots, for both the rate and total.
+    """
     patterns = archi.patterns 
 
     for i in range(len(data)):  
@@ -362,10 +405,10 @@ def visualize_fdr(data,archi,yaxis):
                 yvals.append(statistics.mean(data[i][algorithm][key]))   
             plt.plot(xvals,yvals,label = algorithm) 
         plt.title(yaxis + ' for ' + patterns + ', reward function ' + str(i+1))
-        plt.xlabel('experiments_run')
-        plt.ylabel('faults_found') 
+        plt.xlabel('experiments run')
+        plt.ylabel('faults found') 
         plt.legend(loc='best')
-        path = './figures/' + patterns + '-' + str(i+1) + '-' + yaxis + '-line-total.png'
+        path = './figures/' + patterns + '-' + str(i+1) + '-' + yaxis + '-line-total.pdf'
         plt.savefig(path)
         plt.close()
 
@@ -376,10 +419,10 @@ def visualize_fdr(data,archi,yaxis):
                 yvals.append(statistics.mean(data[i][algorithm][key])/key)   
             plt.plot(xvals,yvals,label = algorithm) 
         plt.title(yaxis + ' for ' + patterns + ', reward function ' + str(i+1))
-        plt.xlabel('experiments_run')
+        plt.xlabel('experiments run')
         plt.ylabel(yaxis) 
         plt.legend(loc='best')
-        path = './figures/' + patterns + '-' + str(i+1) + '-' + yaxis + '-line-rate.png'
+        path = './figures/' + patterns + '-' + str(i+1) + '-' + yaxis + '-line-rate.pdf'
         plt.savefig(path)
         plt.close()
 
@@ -405,11 +448,14 @@ def visualize_fdr(data,archi,yaxis):
         ax.set_title(yaxis + ' for ' + patterns + ', reward function ' + str(i+1))
         formatter = mtick.ScalarFormatter(useOffset=False)
         ax.yaxis.set_major_formatter(formatter)
-        path = './figures/' + patterns + '-' + str(i+1) + '-' + yaxis + '-box.png'
+        path = './figures/' + patterns + '-' + str(i+1) + '-' + yaxis + '-box.pdf'
         plt.savefig(path)
         plt.close()
         
 def visualize_time(data,title):
+    """
+    Visualize the time metric as bar plots.
+    """
     xvals = sorted(data.keys())
     yvals = [] 
     for x in xvals:
@@ -422,13 +468,17 @@ def visualize_time(data,title):
     plt.gcf().subplots_adjust(bottom=0.2)
 
     if 'experiment' in title:
-        path = './figures/times_get.png' 
+        path = './figures/times_get.pdf' 
     else: 
-        path = './figures/times_result.png'
+        path = './figures/times_result.pdf'
         
     plt.savefig(path)
     plt.close() 
+
 def table_counter(data, archi):
+    """
+    Construct a table for the counter data.
+    """
     patterns = archi.patterns 
 
     for i in range(len(data)):
