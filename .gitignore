@@ -119,6 +119,6 @@ dmypy.json
 *.csv
 
 /experiments/*
-/decisionengine/data*
+/data*
 
 /reinforcement/ann/retecs/*
