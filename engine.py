@@ -211,18 +211,18 @@ def run_experiment(arch,metrics,mocker,algorithm):
         #        print("Progress (" + algorithm.name + "):" + str(round((done / total) * 100,2)) + "%")
         #algorithm.reset() 
 
-    metrics['ER-R1'][algorithm.name] = compute_ER(injection_results_R1,faults_to_find) 
+    metrics['ER-R1'][algorithm.name] = compute_ER(injection_results_R1,faults_to_find,algorithm.name,arch.patterns) 
     #metrics['ER-R2'][algorithm.name] = compute_ER(injection_results_R2,faults_to_find)
-    metrics['FDR-R1'][algorithm.name] = compute_FDR(injection_results_R1,experiments_to_run)
+    metrics['FDR-R1'][algorithm.name] = compute_FDR(injection_results_R1,experiments_to_run,algorithm.name,arch.patterns)
     #metrics['FDR-R2'][algorithm.name] = compute_FDR(injection_results_R2,experiments_to_run)
-    metrics['WFDR-R1'][algorithm.name] = compute_WFDR(injection_results_R1,experiments_to_run) 
+    metrics['WFDR-R1'][algorithm.name] = compute_WFDR(injection_results_R1,experiments_to_run,algorithm.name,arch.patterns) 
     #metrics['WFDR-R2'][algorithm.name] = compute_WFDR(injection_results_R2,experiments_to_run) 
     metrics['OPERATIONS-R1'][algorithm.name] = compute_operations_counter(injection_selections_R1)
     #metrics['OPERATIONS-R2'][algorithm.name] = compute_operations_counter(injection_selections_R2)
-    metrics['TIME_GET'][algorithm.name] = compute_time(injection_times_get)
-    metrics['TIME_RESULT'][algorithm.name] = compute_time(injection_times_result)
+    metrics['TIME_GET'][algorithm.name] = compute_time(injection_times_get,'get',algorithm.name,arch.patterns)
+    metrics['TIME_RESULT'][algorithm.name] = compute_time(injection_times_result,'result',algorithm.name,arch.patterns)
 
-def compute_ER(data,limit):
+def compute_ER(data,limit,alg,arch):
     """
     Computes the ER data from the raw data of all runs.
     """
@@ -245,13 +245,13 @@ def compute_ER(data,limit):
                     result[threshold].append(i+1)
                     break 
             
-
+    df = pd.DataFrame(result, columns=thresholds)
+    df.to_csv(arch + "-" + alg + '-ER.csv')
     for threshold in thresholds:
         result[threshold] = statistics.mean(result[threshold]) 
-
     return result 
 
-def compute_FDR(data,total):
+def compute_FDR(data,total,alg,arch):
     """
     Compute the FDR data from the raw data of all runs.
     """
@@ -275,10 +275,11 @@ def compute_FDR(data,total):
                     result[i+1].append(counter)
             
 
-
+    df = pd.DataFrame(result, columns=thresholds)
+    df.to_csv(arch + "-" + alg + '-FDR.csv')
     return result 
 
-def compute_WFDR(data,total):
+def compute_WFDR(data,total,alg,arch):
     """
     Compute the WFDR data from the raw data of all runs.
     """
@@ -299,10 +300,12 @@ def compute_WFDR(data,total):
                 counter += run['WFDR'][i]
                 if i+1 in thresholds:
                     result[i+1].append(counter)
-            
+
+    df = pd.DataFrame(result, columns=thresholds)
+    df.to_csv(arch + "-" + alg + '-FDR.csv')
     return result 
 
-def compute_time(data):
+def compute_time(data,name,alg,arch):
     """
     Compute the time data from the raw data of all runs.
     """
@@ -313,6 +316,8 @@ def compute_time(data):
         total_len += len(run)
         total_sum += sum(run) 
     
+    df = pd.DataFrame([total_sum / total_len], columns=[name])
+    df.to_csv(arch + "-" + alg + '-time_' + name + '.csv')
     return total_sum / total_len
 
 def compute_operations_counter(data):
@@ -341,6 +346,7 @@ def generate_ouptput(metrics,archi):
     #OPERATIONS2 = metrics['OPERATIONS-R2']
 
     visualize_er([ER1],archi)
+
 
     visualize_fdr([FDR1],archi,'FDR')
     visualize_fdr([WFDR1],archi,'WFDR')
@@ -373,6 +379,8 @@ def visualize_er(data,archi):
         plt.legend(loc='best')
         path = './figures/' + patterns + '-' + str(i+1) + '-ER-line-total.pdf' 
         plt.savefig(path)
+        path = './figures/' + patterns + '-' + str(i+1) + '-ER-line-total.svg' 
+        plt.savefig(path)
         plt.close()
     
     for i in range(len(data)):
@@ -388,6 +396,8 @@ def visualize_er(data,archi):
         plt.ylabel('ER') 
         plt.legend(loc='best')
         path = './figures/' + patterns + '-' + str(i+1) + '-ER-line-rate.pdf' 
+        plt.savefig(path)
+        path = './figures/' + patterns + '-' + str(i+1) + '-ER-line-rate.svg' 
         plt.savefig(path)
         plt.close()
 
@@ -410,6 +420,8 @@ def visualize_fdr(data,archi,yaxis):
         plt.legend(loc='best')
         path = './figures/' + patterns + '-' + str(i+1) + '-' + yaxis + '-line-total.pdf'
         plt.savefig(path)
+        path = './figures/' + patterns + '-' + str(i+1) + '-' + yaxis + '-line-total.svg'
+        plt.savefig(path)
         plt.close()
 
         for algorithm in data[i].keys():
@@ -423,6 +435,8 @@ def visualize_fdr(data,archi,yaxis):
         plt.ylabel(yaxis) 
         plt.legend(loc='best')
         path = './figures/' + patterns + '-' + str(i+1) + '-' + yaxis + '-line-rate.pdf'
+        plt.savefig(path)
+        path = './figures/' + patterns + '-' + str(i+1) + '-' + yaxis + '-line-rate.svg'
         plt.savefig(path)
         plt.close()
 
@@ -449,6 +463,8 @@ def visualize_fdr(data,archi,yaxis):
         formatter = mtick.ScalarFormatter(useOffset=False)
         ax.yaxis.set_major_formatter(formatter)
         path = './figures/' + patterns + '-' + str(i+1) + '-' + yaxis + '-box.pdf'
+        plt.savefig(path)
+        path = './figures/' + patterns + '-' + str(i+1) + '-' + yaxis + '-box.svg'
         plt.savefig(path)
         plt.close()
         

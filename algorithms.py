@@ -214,11 +214,11 @@ class BanditOptimisticAlgorithm(BaseAlgorithm):
         return action
 
     def enter_result(self,result):
+
         action = self.last_action
         prev_q = self.Q[action]
         self.N[action] += 1
-        self.Q[action] = prev_q + (1/(self.N[action]+1) * (result - prev_q)
-
+        self.Q[action] = prev_q + (1/(self.N[action]+1)) * (result - prev_q)
 
     def reset(self):
         self.__init__(self.arch,[self.optimistic])
