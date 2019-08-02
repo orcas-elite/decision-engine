@@ -115,8 +115,7 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-# csvs
-*.csv
+
 
 /experiments/*
 /data*
