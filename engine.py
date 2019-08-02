@@ -246,7 +246,7 @@ def compute_ER(data,limit,alg,arch):
                     break 
             
     df = pd.DataFrame(result, columns=thresholds)
-    df.to_csv(arch + "-" + alg + '-ER.csv')
+    df.to_csv('./results/' + arch + "-" + alg + '-ER.csv')
     for threshold in thresholds:
         result[threshold] = statistics.mean(result[threshold]) 
     return result 
@@ -276,7 +276,7 @@ def compute_FDR(data,total,alg,arch):
             
 
     df = pd.DataFrame(result, columns=thresholds)
-    df.to_csv(arch + "-" + alg + '-FDR.csv')
+    df.to_csv('./results/' + arch + "-" + alg + '-FDR.csv')
     return result 
 
 def compute_WFDR(data,total,alg,arch):
@@ -302,7 +302,7 @@ def compute_WFDR(data,total,alg,arch):
                     result[i+1].append(counter)
 
     df = pd.DataFrame(result, columns=thresholds)
-    df.to_csv(arch + "-" + alg + '-FDR.csv')
+    df.to_csv('./results/' + arch + "-" + alg + '-FDR.csv')
     return result 
 
 def compute_time(data,name,alg,arch):
@@ -317,7 +317,7 @@ def compute_time(data,name,alg,arch):
         total_sum += sum(run) 
     
     df = pd.DataFrame([total_sum / total_len], columns=[name])
-    df.to_csv(arch + "-" + alg + '-time_' + name + '.csv')
+    df.to_csv('./results/' + arch + "-" + alg + '-time_' + name + '.csv')
     return total_sum / total_len
 
 def compute_operations_counter(data):
